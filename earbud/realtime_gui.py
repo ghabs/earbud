@@ -11,6 +11,7 @@ recording can be stopped successfully when it is supposed to.
 
 """
 import contextlib
+import datetime
 import queue
 import sys
 import tempfile
@@ -29,7 +30,8 @@ import queue
 import sys
 import time 
 
-from keywords import KeywordSearcher
+from keywords import EmbedSearch
+from llm import ConceptSearcher, Summarization
 
 
 # SETTINGS
@@ -41,6 +43,7 @@ BLOCKSIZE=24678
 # this is the base chunk size the audio is split into in samples. blocksize / 16000 = chunk length in seconds. 
 
 global_ndarray = None
+#TODO: add lazy loading
 model = whisper.load_model(MODEL_TYPE)
 SILENCE_THRESHOLD=400
 # should be set to the lowest sample amplitude that the speech in the audio material has
@@ -62,6 +65,10 @@ class SettingsWindow(Dialog):
 		self.device_list = ttk.Combobox(master, state='readonly', width=50)
 		self.device_list.pack()
 
+		ttk.Label(master, text='Select concept identification rate:').pack(anchor='w')
+		self.concept_rate = ttk.Entry(master, width=50)
+		self.concept_rate.pack()
+
 		self.hostapi_list.bind('<<ComboboxSelected>>', self.update_device_list)
 		with contextlib.suppress(sd.PortAudioError):
 			self.hostapi_list.current(sd.default.hostapi)
@@ -79,8 +86,17 @@ class SettingsWindow(Dialog):
 		if default >= 0:
 			self.device_list.current(self.device_ids.index(default))
 
+	def check_int(self):
+		try:
+			value = int(self.concept_rate.get())
+			return value
+		except ValueError:
+			self.messagebox.showerror("Error", "Please enter an integer for concept rate.")
+			return
+
 	def validate(self):
 		self.result = self.device_ids[self.device_list.current()]
+		self.check_int()
 		return True
 
 
@@ -98,12 +114,11 @@ class RecGui(tk.Tk):
 		f = ttk.Frame()
 
 		self.rec_button = ttk.Button(f)
-		self.rec_button.grid(row=0, column=0, padx=padding, pady=padding)
-		self.rec_button.pack(side='left', padx=padding, pady=padding, anchor='w')
+		self.rec_button.pack(side='top', padx=padding, pady=padding, anchor='w')
 
 		self.settings_button = ttk.Button(
 			f, text='settings', command=self.on_settings)
-		self.settings_button.pack(side='left', padx=padding, pady=padding, anchor='w')
+		self.settings_button.pack(side='top', padx=padding, pady=padding, anchor='w')
 
 		f.pack(expand=True, padx=padding, pady=padding)
 
@@ -119,14 +134,17 @@ class RecGui(tk.Tk):
 		self.meter['mode'] = 'determinate'
 		self.meter['maximum'] = 1.0
 		self.meter.pack(fill='x')
-		
-		self.transcibed_window = tk.Text(f, height=10, width=50, wrap=tk.WORD)
-		self.transcibed_window.pack()
 
-		self.search_window = tk.Text(f, height=10, width=50, wrap=tk.WORD)
-		self.search_window.pack()
+		self.transcribed_window = tk.Text(f, height=100, width=30, wrap=tk.WORD)
+		self.transcribed_window.pack(side=tk.LEFT)
 
-		self.keyword_searcher = KeywordSearcher(self.keywords.get())
+		self.search_window = tk.Text(f, height=100, width=30, wrap=tk.WORD)
+		self.search_window.pack(side=tk.RIGHT)
+
+		#TODO: these should be lazy loaded to reduce time to load, refactor
+		self.bots = [Summarization(),]
+		self.keyword_searcher = EmbedSearch(self.keywords.get())
+		self.concept_searcher = ConceptSearcher()
 
 		# We try to open a stream with default settings first, if that doesn't
 		# work, the user can manually change the device(s)
@@ -160,6 +178,7 @@ class RecGui(tk.Tk):
 		queue = self.audio_q
 
 		while self.recording:
+			#TODO: set principled time delay function
 			time.sleep(0.5)
 			while queue.empty() is False:
 				indata = queue.get()
@@ -181,19 +200,47 @@ class RecGui(tk.Tk):
 					global_ndarray = None
 					indata_transformed = local_ndarray.flatten().astype(np.float32) / 32768.0
 					result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
-					self.transcibed_window.insert(tk.END, "\n -")
-					self.transcibed_window.insert(tk.END, result['text'])
-					_, keycheck = self.check_keywords(result['text'], self.keywords.get().split(','))
-					if _:
-						self.transcibed_window.insert(tk.END, "\n")
-						self.transcibed_window.insert(tk.END, "(Found keyword: " + keycheck + ")")
+					self.transcribed_window.insert(tk.END, "\n -")
+					self.transcribed_window.insert(tk.END, result['text'])
+					keywords = self.keywords.get().split(',')
+					keywords = []
+					"""Keyword Search"""
+					#TODO: split all of these into separate function calls
+					#TODO: add settings config panel to turn on/off various searches/refactor this in general
+					if len(keywords) > 0:
+						_, keycheck = self.check_keywords(result['text'], self.keywords.get().split(','))
+						if _:
+							self.transcribed_window.insert(tk.END, "\n")
+							self.transcribed_window.insert(tk.END, "(Found keyword: " + keycheck + ")")
 					#TODO: don't constantly search, only search when an important word is found
-					#search_results = self.keyword_searcher.search_docs(result['text'])
-					#if search_results:
-				#		for result in search_results:
-				#			self.search_window.insert(tk.END, "\n -")
-				#			self.search_window.insert(tk.END, result)
-					prev = result["text"]
+					"""Search Results"""
+					try:
+						search_results = False # self.keyword_searcher.search_docs(result['text'])
+						if search_results:
+							for result in search_results:
+								self.search_window.insert(tk.END, "\n -")
+								self.search_window.insert(tk.END, result)
+					except:
+						print("Error searching for keyword")
+					"""Concept Search"""
+					try:
+						self.concept_searcher.add(result['text'])
+						_, concepts = self.concept_searcher.check()
+						if _:
+							self.search_window.insert(tk.END, concepts)
+					except:
+						print("Error searching for concepts")
+					"""Summarization"""
+					try:
+						current_transcript = self.transcribed_window.get(1.0, tk.END)
+						_, summary = self.bots[0].summarize(current_transcript + result['text'])
+						if _:
+							#TODO: should create a new data structure to store all of the summaries, transcripts, timestamps, etc.
+							self.search_window.insert(tk.END, "\n - Summary:")
+							self.search_window.insert(tk.END, summary)
+					except:
+						print("Error summarizing")
+				prev = result["text"]
 					
 				del local_ndarray
 				del indata_flattened
