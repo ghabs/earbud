@@ -1,0 +1,1 @@
+# Catalog of useful prompt ideas

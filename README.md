@@ -1,6 +1,17 @@
-TODOs:
-- remove tempfiles
+# Earbud
 
+## Setup
+- create a .env file containing an openai key
+`touch earbud/.env; echo OPENAI_API_KEY="YOUR_KEY"`
+- create a folder for storing transcripts, default file name is .transcripts, editable in gui.py
+`mkdir earbud/.transcripts`
 
-Add product feature for training
-- ffmpeg -i *.m4a -acodec pcm_s16le -ac 2 -ar 44100 *.wav
+- `python3 -m venv .venv`
+- `pip3 install -r requirements.txt`
+
+## Running
+- `python3 earbud/gui.py`
+Debugging mode is available with --debug
+
+## Misc
+docs/ contain the CLA, Legal, and a catalog of todos and useful prompts. By default this is a private closed source project, if your org requires sharing with others/signed nda message the project owner (goldhaber.ben@gmail.com)
