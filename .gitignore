@@ -5,6 +5,6 @@
 *.env
 
 *.pyc
-__pycache__/
+earbud/__pycache__/
 
 .transcripts/
