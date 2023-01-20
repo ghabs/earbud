@@ -19,6 +19,7 @@ from tkinter import ttk
 from tkinter.simpledialog import Dialog
 import whisper
 
+from appdirs import user_data_dir
 from bot_panel import BotPanel
 from bots import ConceptBot, SummarizeBot
 from datastructures import Transcript, Segment
@@ -48,7 +49,7 @@ SILENCE_THRESHOLD=400
 SILENCE_RATIO=100
 
 DIR_LOC = os.path.dirname(os.path.realpath(__file__))
-TRANSCRIPT_FOLDER = f"{DIR_LOC}/.transcripts"
+TRANSCRIPT_FOLDER = user_data_dir("Earbud")
 
 
 class SettingsWindow(Dialog):

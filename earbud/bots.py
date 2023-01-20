@@ -1,8 +1,11 @@
 from typing import List
 from llm import ConceptSearcher
 from langchain import OpenAI, PromptTemplate, LLMChain
+import os
+import json
 
-from datastructures import Transcript, Segment
+from datastructures import Transcript, Segment, BotConfig, Trigger, Action
+from appdirs import user_data_dir
 
 class Bot():
     """
@@ -28,15 +31,89 @@ class Bot():
         """
         Return a string representation of the bot.
         """
+        if "name" in self.__dict__:
+            return f"{self.name}"
         return f"{self.__class__.__name__}"
+    
+    def _to_json(self) -> str:
+        """
+        Return a json representation of the bot.
+        """
+        return json.dumps(self.__dict__)
+
+class UserCreatedBot(Bot):
+    """
+    A bot that is created by a user.
+    """
+    def __init__(self, bot_config: BotConfig) -> None:
+        self.bot_config = bot_config
+        self.name = bot_config.name
+        super().__init__()
+        self._load()
+    
+    def _load(self):
+        """
+        Adds self variables from bot_config.
+        """
+        if self.bot_config.action.type == "prompt":
+            #TODO: set this from global config
+            self._llm = OpenAI()
+            prompt = self.bot_config.action.action
+            prompt += "{text}"
+            self._prompt = PromptTemplate(input_variables=["text"], template=prompt)
+            self.trigger = self.bot_config.trigger
+            self.action = lambda text: self._llm(self._prompt.format(text=text))
+        elif self.bot_config.action.type == "predefined":
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
+
+    
+    def __call__(self, transcript: Transcript) -> str:
+        """
+        Run the bot on the text.
+        """
+        #TODO: allow customization of amount of transcript
+        if self.trigger(transcript.peak().text):
+            return self.action(transcript.peak().text)
+        else:
+            return None
 
 
-class BotManager():
+class BotCreator():
     """
-    Hold bots and manage them for the main GUI
-    GUI: Display the different bots and allow a user to set the params in settings panel
+    Create a new bot from a bot config.
     """
-    pass
+    def make_bot_config(self, name:str, trigger:str, trigger_type:str, action:str, action_type:str) -> Bot:
+        """
+        Accept a form input, parse, and create a bot config.
+        """
+        #TODO add validation and cleaning
+        trigger = Trigger(input=[trigger.lower()], evaluation="contains")
+        action = Action(type=action_type.lower(), action=action)
+        bot_config = BotConfig(name=name, trigger=trigger, action=action)
+        return bot_config
+    
+    def store_bot_config(self, bot_config: BotConfig) -> None:
+        """
+        Store the bot config in user data directory.
+        """
+        user_data_dir = user_data_dir("earbud", "earbud")
+        bot_config_dir = os.path.join(user_data_dir, "bot_configs")
+        if not os.path.exists(bot_config_dir):
+            os.makedirs(bot_config_dir)
+        bot_config_path = os.path.join(bot_config_dir, f"{bot_config.name}.json")
+        with open(bot_config_path, "w") as f:
+            #TODO: check if bot config already exists
+            bot_config_json = bot_config._to_json()
+            json.dump(bot_config_json, f)
+        
+    
+    def create(self, bot_config: BotConfig) -> Bot:
+        """
+        Create a bot from a bot config.
+        """
+        return UserCreatedBot(bot_config)
 
 
 class KeywordBot(Bot):
@@ -76,7 +153,7 @@ class ConceptBot(Bot):
         """
         Run the bot on the text.
         """
-        if not self._empty(transcript):
+        if not self._empty_segment(transcript):
             return None
         return self._concepts(transcript.segments)
 
@@ -107,3 +184,12 @@ class SummarizeBot(Bot):
             return None
         self.i = len(transcript.segments) - 1
         return self._summarize(transcript.segments)
+
+
+if __name__ == "__main__":
+    bot_config = BotConfig(name="test", trigger=Trigger(input=["test"], evaluation="contains"), action=Action(type="prompt", action="Given the following, return yes if the word is test\n {text}"))
+    bot_creator = BotCreator()
+    bot = bot_creator.create(bot_config)
+    t = Transcript()
+    t.segments.append(Segment(text="test", start=0, end=1))
+    print(bot(t))

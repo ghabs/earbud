@@ -21,6 +21,8 @@
 
 # Transcription
 - [ ] Benchmark different model sizes and performance
+- [ ] Preload weights into host memory when a meeting is about to start
+- [ ] Add a new cache directory for the whisper model
 - [ ] On stop, trigger end of transcription
 - [ ] set a user location for storing saved transcripts/outputs
 - [ ] Context setting: experiment with the benefits of setting a context for the meeting
@@ -38,8 +40,10 @@
 
 ## General Purpose Bot
 - [ ] Let user create bots from panel
+
 ### Implementation
     - A form/parser that takes a user input and turns it into a BotConfig with Trigger and Action.
+        - implement enums
     - A general Bot class that takes in the user defined BotConfig.
     - A way of storing and loading the bot config classes
 
