@@ -43,7 +43,16 @@ BLOCKSIZE=24678
 
 global_ndarray = None
 #TODO: add lazy loading
-model = whisper.load_model(MODEL_TYPE)
+try:
+	#TODO: set debug level from global config and main.py
+	logging.debug("Loading model...")
+	start = timeit.default_timer()
+	model = whisper.load_model(MODEL_TYPE)
+	stop = timeit.default_timer()
+	logging.debug("Model loaded. %s", stop - start)
+except:
+	logger.error("Model not found.")
+
 SILENCE_THRESHOLD=400
 # should be set to the lowest sample amplitude that the speech in the audio material has
 SILENCE_RATIO=100
@@ -187,8 +196,7 @@ class RecGui(tk.Tk):
 		#  Not sure why, probably has to do with chunking and the global_ndarray
 
 		while self.recording:
-			#TODO: set principled time delay function
-			time.sleep(0.1)
+			#TODO: determine if sleep function when no talking, make sure not overloading
 			while queue.empty() is False:
 				indata = queue.get()
 				try:
@@ -214,6 +222,7 @@ class RecGui(tk.Tk):
 					indata_transformed = local_ndarray.flatten().astype(np.float32) / 32768.0
 					if logger.level == logging.DEBUG:
 						start = timeit.default_timer()
+						logger.debug("Transcribing, starting %s", start)
 					result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
 					if logger.level == logging.DEBUG:
 						stop = timeit.default_timer()

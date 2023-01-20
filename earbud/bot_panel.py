@@ -21,7 +21,7 @@ class BotPanel(Dialog):
 		w = CreateBotPanel(self, "Create Bot")
 		if w.result:
 			self.bots.append(w.result)
-			print(self.bots)
+			#TODO: get window to update
 			self.update()
 
 	def body(self, master):
