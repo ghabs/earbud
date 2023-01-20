@@ -1,14 +1,17 @@
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+import datetime
 
 @dataclass
 class Segment:
-    start: float
-    end: float
+    start: int
+    end: int
     text: str
 
 @dataclass
 class Transcript:
-    segments: List[Segment]
-    datetime: str
-    meeting_id: Optional(str)
+    segments: list[Segment] = field(default_factory=list)
+    datetime: datetime = datetime.datetime.now()
+    meeting_id: str = ''
+
+    def peak(self):
+        return self.segments[-1]

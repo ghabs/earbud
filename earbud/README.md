@@ -26,6 +26,7 @@ Next Steps:
     - At end of audio_callback, GUI gets updated with new state of transcript
 
 ### Bot Management
+TODO: Make sure external calls are async, added to a stack, and terminated if they fail.
 - Bots are side-effect free python classes that run against the transcript dataclass
 - Parameters are set through the settings interface window
 - Bots must have the following
@@ -71,7 +72,27 @@ _1/18 In Progress_
 Take a set of keywords, and if they are in the call/not mentioned after a certain period of time, flag an alert.
 - Need to make this more usable, currently not actually helpful.
 
+- Diarization
+
+
 ## General Product Improvements
 - Setting background noise and silence parameters
+- General improvements to the transcription
+    - Try different models
+        - Tiny < Base < Small < Medium < Large
+    - TODO: How to handle errors, what should that... feel like?
+    - TODO: I think the buffer might not be clearing properly between rounds, as random phrases got appended
+        -  Might have to do with chunk size/prev_input, as well as the NoneType Object warning
+        - I think I might want to switch entirely to an async method, as there was some blocking lag on ending the record feature.
 - Error handling
     - On stop, if the transcription feature hasn't finished, complete transcription or throw a gentle error
+- TODO: Investigate peak sound meter issues
+
+### Benchmarking
+See ../eval for more
+
+
+## Notes
+- Blackhole works well
+- TODO: set a user location for storing saved transcripts/outputs
+- TODO: Add debug mode
