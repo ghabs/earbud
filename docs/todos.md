@@ -1,0 +1,45 @@
+# GUI
+- [ ] Create figma designs
+- [ ] Investigate timeline based designs
+- [ ] Determine native app implementation
+    - I don't want to invest much time in the GUI until this is decided.
+- [ ] Create a progress monitor that tracks queue size and status of the transcription (how far behind it's lagging)
+- [ ] Append transcription to a dialog box.
+- [ ] BotManager window with customizable params
+    - [x] Dispay bots
+    - [x] Turn on and off
+    - [ ] Display custom params
+- [ ] Create a bot notification panel
+    - [x] Create the timeline view
+    - [ ] Hide/disappear over time
+    - [ ] Delineate which bot sends it
+- [ ] Investigate peak sound meter (not displaying)
+
+## Design
+- [ ] How to handle errors in transcription/bots, what should that... feel like?
+
+# Transcription
+- [ ] Benchmark different model sizes and performance
+- [ ] On stop, trigger end of transcription
+- [ ] set a user location for storing saved transcripts/outputs
+
+## Diarization
+- [ ] Investigate speaker identification with pyannote; at the very least disambiguate me speaking vs. others speaking.
+
+# Bots
+
+## Keyword Search
+- [ ] Reimplement a bot that detects keywords and sends a notification
+
+## Embeddings Search
+- [ ] Reimplement a bot that is tied to knowledge graph
+
+## General Purpose Bot
+- [ ] Let user create bots from panel
+
+# Robustness
+- [ ] Add more debugging features
+- [ ] Error handling
+
+# Docs
+- [ ] Write up using Blackhole to stream in computer audio.
