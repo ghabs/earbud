@@ -14,6 +14,7 @@
     - [ ] Hide/disappear over time
     - [ ] Delineate which bot sends it
 - [ ] Investigate peak sound meter (not displaying)
+- [ ] Configure based on conversation
 
 ## Design
 - [ ] How to handle errors in transcription/bots, what should that... feel like?
@@ -22,6 +23,7 @@
 - [ ] Benchmark different model sizes and performance
 - [ ] On stop, trigger end of transcription
 - [ ] set a user location for storing saved transcripts/outputs
+- [ ] Context setting: experiment with the benefits of setting a context for the meeting
 
 ## Diarization
 - [ ] Investigate speaker identification with pyannote; at the very least disambiguate me speaking vs. others speaking.
@@ -36,6 +38,10 @@
 
 ## General Purpose Bot
 - [ ] Let user create bots from panel
+### Implementation
+    - A form/parser that takes a user input and turns it into a BotConfig with Trigger and Action.
+    - A general Bot class that takes in the user defined BotConfig.
+    - A way of storing and loading the bot config classes
 
 # Robustness
 - [ ] Add more debugging features
