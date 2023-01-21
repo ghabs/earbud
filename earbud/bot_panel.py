@@ -62,7 +62,7 @@ class CreateBotPanel(Dialog):
 		triggerLabel = ttk.Label(master, text="Trigger")
 		triggerLabel.grid(row=1, column=0)
 		self.trigger_var = tk.StringVar()
-		self.trigger = ttk.OptionMenu(master, self.trigger_var, "", "Text", "Time")
+		self.trigger = ttk.OptionMenu(master, self.trigger_var, "", "Contains", "Exact", "Regex", "Time")
 		self.trigger.grid(row=1, column=1)
 		
 		def trigger_callback():

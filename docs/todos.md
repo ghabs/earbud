@@ -4,7 +4,7 @@
 - [ ] Determine native app implementation
     - I don't want to invest much time in the GUI until this is decided.
 - [ ] Create a progress monitor that tracks queue size and status of the transcription (how far behind it's lagging)
-- [ ] Append transcription metadata (filename, context)
+- [ ] Append transcription metadata (filename, context, conversation)
 - [ ] BotManager window with customizable params
     - [x] Dispay bots
     - [x] Turn on and off
@@ -12,7 +12,7 @@
 - [ ] Create a bot notification panel
     - [x] Create the timeline view
     - [ ] Hide/disappear over time
-    - [ ] Delineate which bot sends it
+    - [x] Add bot name
 - [ ] Investigate peak sound meter (not displaying)
 - [ ] Configure based on conversation context
 

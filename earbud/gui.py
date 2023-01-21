@@ -333,6 +333,7 @@ class GUI(tk.Tk):
 		self.wait_for_thread()
 		self.write_transcript(self.transcript)
 		self.transcribed_window.delete('1.0', tk.END)
+		self.bot_window.delete('1.0', tk.END)
 		self.transcript = Transcript()
 
 	def wait_for_thread(self):

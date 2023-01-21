@@ -3,6 +3,7 @@ from langchain import PromptTemplate
 import datetime
 from enum import Enum
 import json
+import re
 
 @dataclass
 class Segment:
@@ -33,37 +34,41 @@ class Conversation:
     """
     pass
 
-class TriggerType(Enum):
+class TriggerType(str, Enum):
     """
     An enum for representing the type of trigger.
     """
-    TEXT = 1
-    TIME = 2
+    CONTAINS = "contains"
+    EXACT = "exact"
+    REGEX = "regex"
+    TIME = "time"
+    THRESHOLD = "threshold"
+
+    def __str__(self):
+        return self.value
 
 @dataclass
 class Trigger:
     #representing text and time based triggers
     input: list[str] | float
-    evaluation: str #TODO: switch to enum
+    evaluation: TriggerType
 
     def __call__(self, text: str = None, time: float = None) -> bool:
         """
         Evaluate the trigger.
         """
-        if isinstance(self.input, list):
-            if self.evaluation == "contains":
-                return any([word in text for word in self.input])
-            elif self.evaluation == "exact":
-                return any([phrase == text for phrase in self.input])
-            else:
-                raise NotImplementedError
-        elif isinstance(self.input, float):
-            if self.evaluation == "time":
-                return time < self.input
-            else:
-                raise NotImplementedError
-        else:
+        if self.evaluation.CONTAINS:
+            return any([word in text for word in self.input])
+        elif self.evaluation.EXACT:
+            return any([phrase == text for phrase in self.input])
+        elif self.evaluation.REGEX:
+            return any([re.search(phrase, text) for phrase in self.input])
+        elif self.evaluation.TIME:
             raise NotImplementedError
+        elif self.evaluation.THRESHOLD:
+            raise NotImplementedError
+        else:
+            raise ValueError("Invalid trigger type.")
 
 class ActionType(Enum):
     """
