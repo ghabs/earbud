@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter.simpledialog import Dialog
 from tkinter import ttk
 
-from bots import BotCreator, BotConfig
+from earbud.bots import BotCreator, BotConfig
 
 
 class BotPanel(Dialog):
@@ -95,7 +95,9 @@ class CreateBotPanel(Dialog):
 		bot_creator = BotCreator()
 		bot_config = bot_creator.make_bot_config(self.name_of_bot.get(), self.trigger_input.get(), self.trigger_var.get(), self.action_input.get(), self.action_var.get())
 		#maybe make a singleton factory class for creating bots
+		#TODO add validation
 		self.result = bot_creator.create(bot_config)
+		bot_creator.store_bot_config(bot_config)
 		return True
 
 

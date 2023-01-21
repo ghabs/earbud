@@ -1,11 +1,10 @@
+from appdirs import user_data_dir
 from typing import List
-from llm import ConceptSearcher
 from langchain import OpenAI, PromptTemplate, LLMChain
 import os
 import json
 
-from datastructures import Transcript, Segment, BotConfig, Trigger, Action
-from appdirs import user_data_dir
+from earbud.datastructures import Transcript, Segment, BotConfig, Trigger, Action
 
 class Bot():
     """
@@ -98,15 +97,25 @@ class BotCreator():
         """
         Store the bot config in user data directory.
         """
-        user_data_dir = user_data_dir("earbud", "earbud")
-        bot_config_dir = os.path.join(user_data_dir, "bot_configs")
-        if not os.path.exists(bot_config_dir):
-            os.makedirs(bot_config_dir)
+        user_data = user_data_dir("earbud", "earbud")
+        bot_config_dir = os.path.join(user_data, "bot_configs")
         bot_config_path = os.path.join(bot_config_dir, f"{bot_config.name}.json")
         with open(bot_config_path, "w") as f:
             #TODO: check if bot config already exists
             bot_config_json = bot_config._to_json()
             json.dump(bot_config_json, f)
+    
+    def load_bot_config(self, name:str) -> BotConfig:
+        """
+        Load a bot config from user data directory.
+        """
+        d = json.loads(name)
+        trigger = Trigger(**d["trigger"])
+        action = Action(**d["action"])
+        name = d["name"]
+        bot_config = BotConfig(name=name, trigger=trigger, action=action)
+        bot = self.create(bot_config)
+        return bot
         
     
     def create(self, bot_config: BotConfig) -> Bot:
@@ -121,6 +130,7 @@ class KeywordBot(Bot):
     A bot that searches for keywords in a sentence and returns the keyword.
     """
     def __init__(self, keywords: List[str]) -> None:
+        self.name = "KeywordBot"
         self.keywords = keywords
         super().__init__()
 
@@ -135,6 +145,7 @@ class KeywordBot(Bot):
 
 class ConceptBot(Bot):
     def __init__(self, llm, k=1) -> None:
+        self.name = "ConceptBot"
         self.llm = llm
         self.k = k
         self.prompt = PromptTemplate(
@@ -159,6 +170,7 @@ class ConceptBot(Bot):
 
 class SummarizeBot(Bot):
     def __init__(self, llm, k=1, window = 5) -> None:
+        self.name = "SummarizeBot"
         self.llm = llm
         self.k = k
         self.window = window

@@ -5,6 +5,7 @@ import asyncio
 import argparse
 import contextlib
 import datetime
+import json
 import logging
 import numpy as np
 import os
@@ -20,18 +21,15 @@ from tkinter.simpledialog import Dialog
 import whisper
 
 from appdirs import user_data_dir
-from bot_panel import BotPanel
-from bots import ConceptBot, SummarizeBot
-from datastructures import Transcript, Segment
+from earbud.bot_panel import BotPanel
+from earbud.bots import ConceptBot, SummarizeBot, BotCreator
+from earbud.datastructures import Transcript, Segment
 from langchain import OpenAI
 
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(format='%(filename)s %(asctime)s %(message)s')
 logger = logging.getLogger()
-
-
 
 # SETTINGS
 MODEL_TYPE="base.en"
@@ -44,12 +42,11 @@ BLOCKSIZE=24678
 global_ndarray = None
 #TODO: add lazy loading
 try:
-	#TODO: set debug level from global config and main.py
-	logging.debug("Loading model...")
+	logger.debug("Loading model...")
 	start = timeit.default_timer()
 	model = whisper.load_model(MODEL_TYPE)
 	stop = timeit.default_timer()
-	logging.debug("Model loaded. %s", stop - start)
+	logger.debug("Model loaded. %s", stop - start)
 except:
 	logger.error("Model not found.")
 
@@ -98,14 +95,14 @@ class SettingsWindow(Dialog):
 		return True
 
 
-class RecGui(tk.Tk):
+class GUI(tk.Tk):
 
 	stream = None
 
 	def __init__(self):
 		super().__init__()
 
-		self.title('Recording GUI')
+		self.title('Earbud')
 
 		padding = 10
 
@@ -153,7 +150,18 @@ class RecGui(tk.Tk):
 			llm = OpenAI()
 		except:
 			print("Error loading LLM")
+
+		#TODO add to global config
+		user_data = user_data_dir("earbud", "earbud")
+		bot_config_dir = os.path.join(user_data, "bot_configs")
+		if not os.path.exists(bot_config_dir):
+			os.makedirs(bot_config_dir)
+		bot_creator = BotCreator()
 		self.bots = [ConceptBot(llm=llm), SummarizeBot(llm=llm),]
+		for bot_file in os.listdir(bot_config_dir):
+			if bot_file.endswith(".json"):
+				bot_file_json = json.load(open(os.path.join(bot_config_dir, bot_file)))
+				self.bots.append(bot_creator.load_bot_config(bot_file_json))
 		# We try to open a stream with default settings first, if that doesn't
 		# work, the user can manually change the device(s)
 		self.create_stream()
@@ -180,23 +188,49 @@ class RecGui(tk.Tk):
 		return False, None
 	
 	async def bot_results(self):
-		bot_results = [(str(bot), bot(self.transcript)) for bot in self.bots if bot.active]
-		"""Update GUI from bot results"""
-		for bot_result in bot_results:
-			if bot_result[1] is not None:
-				self.bot_window.insert(tk.END, f"\n")
-				self.bot_window.insert(tk.END, bot_result)
+		#TODO: add bot results to transcript as they come in and error handling
+		for bot in self.bots:
+			if bot.active:
+				try:
+					#TODO: turn bot calls into async
+					bot_result = bot(self.transcript)
+					"""Update GUI from bot results"""
+					if bot_result is not None:
+						self.bot_window.insert(tk.END, f"\n {bot.name}")
+						self.bot_window.insert(tk.END, bot_result)
+				except Exception as e:
+					print(e)
+					print("Error with bot: " + str(bot))
+	
+	def process_transcript(self, indata_transformed, prev):
+		if logger.level == logging.DEBUG:
+			start = timeit.default_timer()
+			logger.debug("Transcribing, starting %s", start)
+		result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
+		if logger.level == logging.DEBUG:
+			stop = timeit.default_timer()
+			logger.debug("Time: %s", stop - start)
+		#TODO get start and end times from result.segment
+		segments = [Segment(text=s["text"], start=s["start"], end=s["end"],
+			temperature=s["temperature"], avg_log_prob=s["avg_logprob"], no_speech_prob=s["no_speech_prob"])
+			for s in result['segments']]
+		self.transcript.segments.extend(segments)
+		#TODO: Add a separate update GUI function that reflects the transcript, handles trim(), etc.
+		if result['text'] != '':
+			self.transcribed_window.insert(tk.END, "\n\n")
+			result_text = "{text}".format(text=result['text'])
+			self.transcribed_window.insert(tk.END, result_text)
+		return result['text']
 
 	def process_audio_buffer(self):
 		global global_ndarray
 		global_ndarray = None
-		prev = ''
 		queue = self.audio_q
-		#TODO: sometimes with long periods of silence, a random transcription is fired.
-		#  Not sure why, probably has to do with chunking and the global_ndarray
-
+		continuation = False
+		prev = None
 		while self.recording:
 			#TODO: determine if sleep function when no talking, make sure not overloading
+			time.sleep(0.25)
 			while queue.empty() is False:
 				indata = queue.get()
 				try:
@@ -204,43 +238,34 @@ class RecGui(tk.Tk):
 				except AttributeError as e:
 					print(e)
 					continue
-				
-				# discard buffers that contain mostly silence
-				if((np.asarray(np.where(indata_flattened > SILENCE_THRESHOLD)).size < SILENCE_RATIO)):
+
+				# discard buffers that contain mostly silence only if previous buffer wasn't a continuation
+				if(continuation is False and (np.asarray(np.where(indata_flattened > SILENCE_THRESHOLD)).size < SILENCE_RATIO)):
 					continue
 						
 				if (global_ndarray is not None):
 					global_ndarray = np.concatenate((global_ndarray, indata), dtype='int16')
 				else:
 					global_ndarray = indata
-				#TODO: need a better background sound parameter
+				
+				#TODO: might not be robust to general streaming audio, better to use a buffer and go back and fix earlier mistakes
+				continuation = True
+				# keep recording if the person is still talking
 				if (np.average((indata_flattened[-100:-1])) > SILENCE_THRESHOLD/5):
 					continue
 				else:
 					local_ndarray = global_ndarray.copy()
 					global_ndarray = None
 					indata_transformed = local_ndarray.flatten().astype(np.float32) / 32768.0
-					if logger.level == logging.DEBUG:
-						start = timeit.default_timer()
-						logger.debug("Transcribing, starting %s", start)
-					result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
-					if logger.level == logging.DEBUG:
-						stop = timeit.default_timer()
-						logger.debug("Time: %s", stop - start)
-					#TODO get start and end times from result.segment
-					seg = Segment(text=result['text'].strip(), start=0, end=0)
-					self.transcript.segments.append(seg)
-					#TODO: Add a separate update GUI function that reflects the transcript, handles trim(), etc.
-					if seg.text != '':
-						self.transcribed_window.insert(tk.END, "\n\n")
-						self.transcribed_window.insert(tk.END, result['text'])
+					"""Transcribe Audio"""
+					prev = self.process_transcript(indata_transformed, prev)
 					"""Bot Management Loop"""
+					#TODO: make sure only called once
 					asyncio.run(self.bot_results())
+					continuation = False
+					del local_ndarray
+					del indata_flattened
 
-				prev = result["text"]
-					
-				del local_ndarray
-				del indata_flattened
 
 	def create_stream(self, device=None):
 		if self.stream is not None:
@@ -275,11 +300,15 @@ class RecGui(tk.Tk):
 			self.peak = 0
 	
 	def write_transcript(self, transcript: Transcript):
-		date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-		with open(f'{TRANSCRIPT_FOLDER}/{date}_{MODEL_TYPE}_transcript.txt', 'w') as f:
-			for s in transcript.segments:
-				f.write(s.text + '\n')
-
+		date = None
+		try:
+			date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+			with open(f'{TRANSCRIPT_FOLDER}/{date}_{MODEL_TYPE}_transcript.txt', 'w') as f:
+				for s in transcript.segments:
+					f.write(s.text + '\n')
+		except Exception as e:
+			print(f'Error occurred while writing transcript {date}: {e}')
+	
 	def on_rec(self):
 		self.settings_button['state'] = 'disabled'
 		self.recording = True
@@ -356,7 +385,7 @@ def main():
 	args = parser.parse_args()
 	if args.debug:
 		logger.setLevel(logging.DEBUG)
-	app = RecGui()
+	app = GUI()
 	app.mainloop()
 
 

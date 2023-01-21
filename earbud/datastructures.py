@@ -2,12 +2,16 @@ from dataclasses import dataclass, field
 from langchain import PromptTemplate
 import datetime
 from enum import Enum
+import json
 
 @dataclass
 class Segment:
-    start: int
-    end: int
+    start: float
+    end: float
     text: str
+    temperature: float| None = None
+    avg_log_prob: float| None = None
+    no_speech_prob: float| None = None
 
 @dataclass
 class Transcript:
@@ -16,6 +20,8 @@ class Transcript:
     meeting_id: str = ''
 
     def peak(self):
+        if len(self.segments) == 0:
+            return Segment(start=0, end=0, text='')
         return self.segments[-1]
 
 
@@ -84,12 +90,12 @@ class Action:
             return self.action
         else:
             raise NotImplementedError
-
+    
     def __repr__(self) -> str:
         """
         Return a string representation of the action.
         """
-        return f"{self.__class__.__name__}"
+        return f"{self.type}: {self.action}"
 
 @dataclass
 class BotConfig:
@@ -97,3 +103,11 @@ class BotConfig:
     action: Action
     name: str
 
+    def _to_json(self) -> str:
+        """
+        Return a json representation of the bot.
+        """
+        d = self.__dict__
+        d["trigger"] = d["trigger"].__dict__
+        d["action"] = d["action"].__dict__
+        return json.dumps(d)

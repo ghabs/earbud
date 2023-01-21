@@ -10,7 +10,7 @@
 - `pip3 install -r requirements.txt`
 
 ## Running
-- `python3 earbud/gui.py`
+- `python3 main.py`
 Debugging mode is available with --debug
 
 ## Misc
