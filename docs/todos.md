@@ -14,14 +14,14 @@
     - [ ] Hide/disappear over time
     - [ ] Delineate which bot sends it
 - [ ] Investigate peak sound meter (not displaying)
-- [ ] Configure based on conversation
+- [ ] Configure based on conversation context
 
 ## Design
 - [ ] How to handle errors in transcription/bots, what should that... feel like?
 
 # Transcription
+- [ ] Top TODO: Explore different blocksizes for faster processing, switch to async
 - [ ] Benchmark different model sizes and performance
-- [ ] Preload weights into host memory when a meeting is about to start
 - [ ] Add a new cache directory for the whisper model
 - [ ] On stop, trigger end of transcription
 - [ ] set a user location for storing saved transcripts/outputs
