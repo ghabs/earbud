@@ -59,6 +59,7 @@ class UserCreatedBot(Bot):
         """
         Adds self variables from bot_config.
         """
+        self.trigger = self.bot_config.trigger
         if self.bot_config.action.type == "prompt":
             # TODO: set this from global config
             self._llm = OpenAI()
@@ -66,14 +67,14 @@ class UserCreatedBot(Bot):
             prompt += "{text}"
             self._prompt = PromptTemplate(
                 input_variables=["text"], template=prompt)
-            self.trigger = self.bot_config.trigger
             self.action = lambda text: self._llm(
                 self._prompt.format(text=text))
         elif self.bot_config.action.type == "predefined":
             raise NotImplementedError
         elif self.bot_config.action.type == "match":
+            #TODO: this logic should be unifed with datastructures.Action
             r = re.compile(self.bot_config.action.action)
-            self.action = lambda text: r.findall(text)
+            self.action = lambda text: r.findall(text.strip().lower())
         elif self.bot_config.action.type == "substitute":
             r = re.compile(self.bot_config.action.action)
             #TODO add argument for substitution
@@ -85,7 +86,7 @@ class UserCreatedBot(Bot):
         """
         Run the bot on the text.
         """
-        # TODO: allow customization of amount of transcript
+        # TODO: allow customization of amount of transcript, get more than just the most recent segment
         if self.trigger(transcript.peak().text):
             return self.action(transcript.peak().text)
         else:
@@ -125,10 +126,11 @@ class BotCreator():
         Load a bot config from user data directory.
         """
         d = json.loads(name)
-        trigger = Trigger(**d["trigger"])
+        trigger = Trigger(input=d["trigger"]["input"], evaluation=TriggerType(d["trigger"]["evaluation"]))
+        print(trigger)
         action = Action(**d["action"])
-        name = d["name"]
-        bot_config = BotConfig(name=name, trigger=trigger, action=action)
+        n = d["name"]
+        bot_config = BotConfig(name=n, trigger=trigger, action=action)
         bot = self.create(bot_config)
         return bot
 

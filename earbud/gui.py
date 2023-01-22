@@ -31,13 +31,14 @@ load_dotenv()
 
 logger = logging.getLogger()
 
-# SETTINGS
-MODEL_TYPE="base.en"
 # the model used for transcription. https://github.com/openai/whisper#available-models-and-languages
-LANGUAGE="English"
+MODEL_TYPE="base.en"
 # pre-set the language to avoid autodetection
-BLOCKSIZE=24678 
-# this is the base chunk size the audio is split into in samples. blocksize / 16000 = chunk length in seconds. 
+LANGUAGE="English"
+# this is the base chunk size the audio is split into in samples. blocksize / 16000 = chunk length in seconds.
+# BLOCKSIZE=24678 - much more responsibe with zero defined block size, hoever, it also splits it up more and maybe doesn't have as good
+# accuracy
+#TODO: experiment blocksize
 
 global_ndarray = None
 #TODO: add lazy loading
@@ -233,6 +234,7 @@ class GUI(tk.Tk):
 			time.sleep(0.25)
 			while queue.empty() is False:
 				indata = queue.get()
+				#TODO: handle none case, determine if global_ndarray is cleared
 				try:
 					indata_flattened = abs(indata.flatten())
 				except AttributeError as e:
@@ -270,7 +272,7 @@ class GUI(tk.Tk):
 	def create_stream(self, device=None):
 		if self.stream is not None:
 			self.stream.close()
-		self.stream = sd.InputStream(samplerate=16000, dtype='int16', blocksize=BLOCKSIZE,
+		self.stream = sd.InputStream(samplerate=16000, dtype='int16',
 			device=device, channels=1, callback=self.audio_callback)
 		self.stream.start()
 

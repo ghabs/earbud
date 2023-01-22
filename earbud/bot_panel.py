@@ -78,7 +78,7 @@ class CreateBotPanel(Dialog):
 		actionLabel = ttk.Label(master, text="Action")
 		actionLabel.grid(row=3, column=0)
 		self.action_var = tk.StringVar()
-		self.action = ttk.OptionMenu(master, self.action_var, "", "Predefined", "Prompt")
+		self.action = ttk.OptionMenu(master, self.action_var, "", "Predefined", "Prompt", "Match", "Substitute")
 		self.action.grid(row=3, column=1)
 
 		def action_callback():

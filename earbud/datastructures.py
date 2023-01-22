@@ -34,6 +34,7 @@ class Conversation:
     """
     pass
 
+#TODO: NB, Enums seem like they overcomplicate things here
 class TriggerType(str, Enum):
     """
     An enum for representing the type of trigger.
@@ -53,7 +54,8 @@ class ActionType(str, Enum):
     """
     PROMPT = "prompt"
     PREDEFINED = "predefined"
-    REGEX = "regex"
+    MATCH = "match"
+    SUBSTITUTE = "substitute"
 
     def __str__(self):
         return self.value
@@ -68,15 +70,16 @@ class Trigger:
         """
         Evaluate the trigger.
         """
-        if self.evaluation.CONTAINS:
+        if self.evaluation == TriggerType.REGEX:
+            #TODO: This is a bit of a hack, but it works for now
+            return re.match(self.input[0], text.strip().lower())
+        if self.evaluation == TriggerType.CONTAINS:
             return any([word in text for word in self.input])
-        elif self.evaluation.EXACT:
+        elif self.evaluation == TriggerType.EXACT:
             return any([phrase == text for phrase in self.input])
-        elif self.evaluation.REGEX:
-            return any([re.search(phrase, text) for phrase in self.input])
-        elif self.evaluation.TIME:
+        elif self.evaluation == TriggerType.TIME:
             raise NotImplementedError
-        elif self.evaluation.THRESHOLD:
+        elif self.evaluation == TriggerType.THRESHOLD:
             raise NotImplementedError
         else:
             raise ValueError("Invalid trigger type.")
@@ -98,8 +101,8 @@ class Action:
             return PromptTemplate(input_variables=["text"], template=self.action)
         elif self.type == "predefined":
             return self.action
-        elif self.type == "regex":
-            raise NotImplementedError
+        elif self.type == "match":
+            return self.action
         else:
             raise NotImplementedError
     
