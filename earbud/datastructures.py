@@ -47,6 +47,17 @@ class TriggerType(str, Enum):
     def __str__(self):
         return self.value
 
+class ActionType(str, Enum):
+    """
+    An enum for representing the type of action.
+    """
+    PROMPT = "prompt"
+    PREDEFINED = "predefined"
+    REGEX = "regex"
+
+    def __str__(self):
+        return self.value
+
 @dataclass
 class Trigger:
     #representing text and time based triggers
@@ -70,12 +81,6 @@ class Trigger:
         else:
             raise ValueError("Invalid trigger type.")
 
-class ActionType(Enum):
-    """
-    An enum for representing the type of action.
-    """
-    PROMPT = 1
-    PREDEFINED = 2
 
 class Action:
     """
@@ -93,6 +98,8 @@ class Action:
             return PromptTemplate(input_variables=["text"], template=self.action)
         elif self.type == "predefined":
             return self.action
+        elif self.type == "regex":
+            raise NotImplementedError
         else:
             raise NotImplementedError
     

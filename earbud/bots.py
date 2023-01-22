@@ -3,6 +3,7 @@ from typing import List
 from langchain import OpenAI, PromptTemplate, LLMChain
 import os
 import json
+import re
 
 from earbud.datastructures import Transcript, Segment, BotConfig, Trigger, Action, TriggerType
 
@@ -70,6 +71,13 @@ class UserCreatedBot(Bot):
                 self._prompt.format(text=text))
         elif self.bot_config.action.type == "predefined":
             raise NotImplementedError
+        elif self.bot_config.action.type == "match":
+            r = re.compile(self.bot_config.action.action)
+            self.action = lambda text: r.findall(text)
+        elif self.bot_config.action.type == "substitute":
+            r = re.compile(self.bot_config.action.action)
+            #TODO add argument for substitution
+            self.action = lambda text: r.sub("", text)
         else:
             raise NotImplementedError
 
