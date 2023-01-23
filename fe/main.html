@@ -173,11 +173,15 @@
         function stop() {
             eel.stop_py();
         };
+        function format_output() {
+            eel.format_output_py();
+        };
         function end() {
             eel.finish();
         };
         document.getElementById('record-btn').addEventListener('click', record);
         document.getElementById('stop-btn').addEventListener('click', stop);
+        document.getElementById('format-btn').addEventListener('click', format_output);
     </script>
 
     <script>

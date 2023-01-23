@@ -243,7 +243,7 @@ def stop_py():
 	recorder.stream = None
 
 @eel.expose
-def finish_py():
+def format_output_py():
 	print("Formatting Transcript")
 	recorder.format_output()
 
