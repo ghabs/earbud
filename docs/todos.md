@@ -1,9 +1,10 @@
 # GUI
-- [ ] Create figma designs
-- [ ] Investigate timeline based designs
-- [ ] Determine native app implementation
+- [x] Create figma designs
+- [x] Investigate timeline based designs
+- [x] Determine native app implementation
     - I don't want to invest much time in the GUI until this is decided.
 - [ ] Create a progress monitor that tracks queue size and status of the transcription (how far behind it's lagging)
+- [ ] Investigate greenlet vs thread with eel.
 - [ ] Append transcription metadata (filename, context, conversation)
 - [ ] BotManager window with customizable params
     - [x] Dispay bots

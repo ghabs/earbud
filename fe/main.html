@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Collapsible Columns</title>
+    <style>
+        .flex {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            align-items: stretch;
+            gap: 15px;
+            margin-bottom: 10px;
+            height: 500px;
+        }
+
+        .column {
+            background-color: rgba(255, 255, 255, 0.8);
+            font-size: 30px;
+            text-align: center;
+            flex-grow: 1;
+            flex-shrink: 0;
+            flex-basis: 0px;
+            border: 1px solid black;
+            overflow: scroll;
+        }
+
+        .column textarea {
+            box-sizing: border-box;
+            overflow: auto;
+            resize: none;
+        }
+
+        .col2 ul li {
+            list-style-type: none;
+            opacity: 1;
+            transition: opacity 0.3s ease-in;
+        }
+
+        .col2 ul li:nth-child(n+6) {
+            opacity: 0.4;
+        }
+
+        #bot-panel .bot-panel-content {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .column>textarea {
+            flex: 1;
+        }
+
+        .closed {
+            display: none;
+        }
+
+        .grid>div {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Settings-->
+    <div class="hide-btn row">
+        <button data-column="col1">Toggle Column 1</button>
+        <button data-column="col2">Toggle Column 2</button>
+        <button data-column="col3">Toggle Column 3</button>
+    </div>
+    <!-- Display Panels-->
+    <div class="flex">
+
+        <div class="column col1">
+            <h2>Transcript</h2>
+            <textarea id="transcript"></textarea>
+        </div>
+        <div class="column col2">
+            <h2>Bots</h2>
+            <ul></ul>
+        </div>
+        <div class="column col3">
+            <h2>Output</h2>
+            <textarea id="output"></textarea>
+        </div>
+    </div>
+
+    <div class="settings-btn row">
+        <button id="record-btn">Record</button>
+        <button id="stop-btn">Stop</button>
+        <button id="format-btn">Format Output</button>
+    </div>
+    <!-- Bot Panel -->
+    <div id="bot-panel">
+        <div class="bot-panel-content">
+
+        </div>
+        <div class="bot-panel-create">
+            <h2>Create Bot</h2>
+            <form class="bot-panel-form">
+                <label for="name">Name:</label>
+                <input type="text" name="name" id="name">
+                <br>
+                <label for="trigger">Trigger:</label>
+                <select name="trigger" id="trigger">
+                    <option value="contains">Contains</option>
+                    <option value="exact">Exact</option>
+                    <option value="regex">Regex</option>
+                </select>
+                <br>
+                <div id="trigger_value" style="display:none;">
+                    <label for="trigger_value">Trigger Value:</label>
+                    <input type="text" name="trigger_value" id="trigger_value">
+                </div>
+                <br>
+                <label for="action">Action:</label>
+                <select name="action" id="action">
+                    <option value="prompt">Prompt</option>
+                    <option value="match">Match</option>
+                </select>
+                <br>
+                <div id="action_value" style="display:none;">
+                    <label for="action_value">Action Value:</label>
+                    <input type="text" name="action_value" id="action_value">
+                </div>
+                <br>
+                <input type="submit" value="Create Bot">
+            </form>
+            <script>
+                document.getElementById('trigger').addEventListener('change', function () {
+                    if (this.value == 'regex' || this.value == 'exact' || this.value == 'contains') {
+                        document.getElementById('trigger_value').style.display = 'block';
+                    } else {
+                        document.getElementById('trigger_value').style.display = 'none';
+                    }
+                });
+                document.getElementById('action').addEventListener('change', function () {
+                    if (this.value == 'match' || this.value == 'prompt') {
+                        document.getElementById('action_value').style.display = 'block';
+                    } else {
+                        document.getElementById('action_value').style.display = 'none';
+                    }
+                });
+                document.querySelector('.bot-panel-form').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    let name = document.getElementById('name').value;
+                    let trigger = document.getElementById('trigger').value;
+                    let trigger_value = document.getElementById('trigger_value').value;
+                    let action = document.getElementById('action').value;
+                    let action_value = document.getElementById('action_value').value;
+                    eel.create_bot_py(name, trigger, trigger_value, action, action_value);
+                })
+            </script>
+        </div>
+    </div>
+    <div class="bot-panel-settings">
+        <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Panel</button>
+    </div>
+
+    <script type="text/javascript" src="/eel.js"></script>
+    <script>
+        function record() {
+            eel.record_py();
+        };
+        function stop() {
+            eel.stop_py();
+        };
+        function end() {
+            eel.finish();
+        };
+        document.getElementById('record-btn').addEventListener('click', record);
+        document.getElementById('stop-btn').addEventListener('click', stop);
+    </script>
+
+    <script>
+        /**
+         * Transcript
+         */
+        eel.expose(appendTranscriptText);
+        function appendTranscriptText(text) {
+            let transcript = document.querySelector('#transcript');
+            transcript.value = transcript.value + " " + text;
+        }
+
+        eel.expose(clearTranscript);
+        function clearTranscript() {
+            let transcript = document.querySelector('#transcript');
+            transcript.value = "";
+        }
+    </script>
+    <script>
+        /**
+         * Bots
+         */
+        eel.expose(appendBotText);
+        function appendBotText(bot) {
+            let botList = document.querySelector('.col2 ul');
+            let botItem = document.createElement('li');
+            botItem.innerText = bot;
+            botList.insertBefore(botItem, botList.childNodes[0]);
+        }
+
+        eel.expose(clearBots);
+        function clearBots() {
+            let botList = document.querySelector('.col2 ul');
+            botList.innerHTML = "";
+        }
+    </script>
+    <script>
+        /**
+         * Output
+         */
+        eel.expose(setOutputText);
+        function setOutputText(text) {
+            let output = document.querySelector('#output');
+            output.value = text;
+        }
+    </script>
+
+    <script>
+        // Hide a column or panel
+        document.querySelector('.hide-btn').addEventListener('click', (event) => {
+            let button = event.target;
+            console.log(button)
+            let column = button.getAttribute('data-column');
+            document.querySelector(`.${column}`).classList.toggle('closed');
+        });
+    </script>
+    <script type="text/javascript">
+        /**
+         * Bot Panel
+         */
+        // const bots = [{ "name": "summarize bot", "active": true }, { "name": "concept bot", "active": true }]
+        function mapBots(bots) {
+            document.querySelector('.bot-panel-content').innerHTML = bots.map(bot => {
+                return `<div class="bot">
+                    <h3>${bot.name}</h3>
+                    <p>Active: ${bot.active}</p>
+                    <button id='${bot.name}-active'>Active</button>
+                </div>`
+            }).join('')
+        }
+        document.getElementById('bot-panel-settings').addEventListener('click', (event) => {
+            document.getElementById('bot-panel').classList.toggle('closed');
+        });
+        document.getElementById('bot-panel').addEventListener('click', (event) => {
+            let button = event.target;
+            let botName = button.id.split('-')[0];
+            if (button.id.includes('active')) {
+                eel.toggle_bot_py(botName)(mapBots);
+            }
+        })
+        eel.get_bots_py()(mapBots);
+    </script>
+</body>
+
+</html>

@@ -176,18 +176,6 @@ class GUI(tk.Tk):
 		self.init_buttons()
 		self.update_gui()
 	
-	def check_keywords(self, text, keywords):
-		text = text.lower()
-		text = text.replace(".", "")
-		text = text.replace(",", "")
-		text = text.replace("!", "")
-		text = text.replace("?", "")
-		text = text.split(" ")
-		for keyword in keywords:
-			if keyword in text:
-				return True, keyword
-		return False, None
-	
 	async def bot_results(self):
 		#TODO: add bot results to transcript as they come in and error handling
 		for bot in self.bots:

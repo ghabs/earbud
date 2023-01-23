@@ -127,7 +127,6 @@ class BotCreator():
         """
         d = json.loads(name)
         trigger = Trigger(input=d["trigger"]["input"], evaluation=TriggerType(d["trigger"]["evaluation"]))
-        print(trigger)
         action = Action(**d["action"])
         n = d["name"]
         bot_config = BotConfig(name=n, trigger=trigger, action=action)
