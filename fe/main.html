@@ -66,6 +66,10 @@
             flex: 0 0 50%;
             max-width: 50%;
         }
+
+        body {
+            background-color: slategray;
+        }
     </style>
 </head>
 
@@ -164,7 +168,37 @@
     <div class="bot-panel-settings">
         <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Panel</button>
     </div>
+    <!-- Output Panel -->
+    <div id="ouput-fmt-panel">
+        <h2>Output Format Panel</h2>
+        <div class="output-format-panel">
+            <select id="out-fmt-select">
+            </select>
+        </div>
+        <div class="output-panel-settings">
+            <form clas="output-panel-form">
+                <div class="output-panel-prompt">
+                    <label for="output-panel-name">Filename:</label>
+                    <input type="text" id="output-panel-name" placeholder="Filename">
+                </div>
+                <div class="output-panel-prompt">
+                    <label for="output-fmt-prompt">Prompt:</label>
+                    <textarea id="output-fmt-prompt" rows="5" placeholder="Prompt"></textarea>
+                </div>
+                <input type="submit" value="Save">
+            </form>
+            <script>
+                document.querySelector(".output-panel-form").addEventListener("submit", function (e) {
+                    e.preventDefault();
+                    let name = document.getElementById("output-panel-name").value;
+                    let prompt = document.getElementById("output-fmt-prompt").value;
+                    eel.create_output_format_py(name, prompt)(getOutFmts);
+                });
+            </script>
+        </div>
+    </div>
 
+    <!-- Eel -->
     <script type="text/javascript" src="/eel.js"></script>
     <script>
         function record() {
@@ -176,12 +210,42 @@
         function format_output() {
             eel.format_output_py();
         };
+        function get_output_format() {
+            eel.get_output_format_py()(console.log);
+        };
         function end() {
             eel.finish();
         };
         document.getElementById('record-btn').addEventListener('click', record);
         document.getElementById('stop-btn').addEventListener('click', stop);
         document.getElementById('format-btn').addEventListener('click', format_output);
+    </script>
+    <script>
+        /**
+         * Output Format
+         */
+        function getOutFmts(options) {
+            let select = document.getElementById("out-fmt-select");
+            select.innerHTML = "";
+            let opt = document.createElement("option");
+            opt.value = "default";
+            opt.innerHTML = "Select Output Format";
+            select.appendChild(opt);
+
+            options.forEach(option => {
+                let opt = document.createElement("option");
+                opt.value = option.value;
+                opt.innerHTML = option.name;
+                select.appendChild(opt);
+            });
+        }
+        eel.output_fmts_py()(getOutFmts);
+        document.getElementById('out-fmt-select').addEventListener('change', function () {
+            eel.set_output_format_py(this.value);
+            setOutputText(this.value);
+        });
+
+
     </script>
 
     <script>
@@ -242,7 +306,6 @@
         /**
          * Bot Panel
          */
-        // const bots = [{ "name": "summarize bot", "active": true }, { "name": "concept bot", "active": true }]
         function mapBots(bots) {
             document.querySelector('.bot-panel-content').innerHTML = bots.map(bot => {
                 return `<div class="bot">

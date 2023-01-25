@@ -17,6 +17,7 @@ from langchain import OpenAI
 from earbud.bots import ConceptBot, SummarizeBot, BotCreator
 from earbud.datastructures import Transcript, Segment
 from earbud.utilities import mtg_summary
+from earbud.output_fmts import user_output_fmts, save_output_fmt
 
 
 load_dotenv()
@@ -63,6 +64,7 @@ class Recorder():
 		self.bots = []
 		self.bot_loading()
 		self.transcript = Transcript()
+		self.output_fmt = None
 
 	
 	def bot_loading(self):
@@ -256,7 +258,6 @@ def save_py():
 	except Exception as e:
 		print(e)
 
-
 @eel.expose
 def get_bots_py():
 	return [{"name": bot.name, "active": bot.active} for bot in recorder.bots]
@@ -277,6 +278,21 @@ def create_bot_py(name, trigger, trigger_value, action, action_value):
 	recorder.bots.append(bot_creator.create(bot_config))
 	bot_creator.store_bot_config(bot_config)
 	return get_bots_py()
+
+@eel.expose
+def output_fmts_py():
+	return user_output_fmts()
+
+@eel.expose
+def set_output_format_py(fmt):
+	print(f"Setting Output Format {fmt}")
+	recorder.output_fmt = fmt
+
+@eel.expose
+def create_output_format_py(fmt):
+	print(f"Creating Output Format {fmt}")
+	save_output_fmt(fmt)
+	return output_fmts_py()
 
 
 eel.start('main.html')

@@ -33,7 +33,11 @@
 - [ ] investigate calling an llm on transcript to improve quality
 
 ## Diarization
-- [ ] Investigate speaker identification with pyannote; at the very least disambiguate me speaking vs. others speaking.
+- [x] Investigate speaker identification with pyannote; at the very least disambiguate me speaking vs. others speaking.
+    - Using embeddings from speechbrain to verify
+- [ ] Implement a Diarization feature
+- [ ] Investigate https://rmozone.com/snapshots/2021/11/gentle-history/
+
 
 # Bots
 - [ ] add a user profile so if a user deactivates or removes a bot from their user dir its not readded.
