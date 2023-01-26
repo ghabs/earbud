@@ -67,6 +67,10 @@
             max-width: 50%;
         }
 
+        .settings-btn {
+            text-align: center;
+        }
+
         body {
             background-color: slategray;
         }
@@ -89,10 +93,16 @@
         </div>
         <div class="column col2">
             <h2>Bots</h2>
-            <ul></ul>
+            <div class="bot-panel-content">
+
+            </div>
         </div>
         <div class="column col3">
             <h2>Output</h2>
+            <div class="output-format-panel">
+                <select id="out-fmt-select">
+                </select>
+            </div>
             <textarea id="output"></textarea>
         </div>
     </div>
@@ -101,12 +111,10 @@
         <button id="record-btn">Record</button>
         <button id="stop-btn">Stop</button>
         <button id="format-btn">Format Output</button>
+        <button id="save-btn">Save</button>
     </div>
     <!-- Bot Panel -->
     <div id="bot-panel">
-        <div class="bot-panel-content">
-
-        </div>
         <div class="bot-panel-create">
             <h2>Create Bot</h2>
             <form class="bot-panel-form">
@@ -166,17 +174,14 @@
         </div>
     </div>
     <div class="bot-panel-settings">
-        <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Panel</button>
+        <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Settings</button>
     </div>
     <!-- Output Panel -->
     <div id="ouput-fmt-panel">
         <h2>Output Format Panel</h2>
-        <div class="output-format-panel">
-            <select id="out-fmt-select">
-            </select>
-        </div>
+
         <div class="output-panel-settings">
-            <form clas="output-panel-form">
+            <form class="output-panel-form">
                 <div class="output-panel-prompt">
                     <label for="output-panel-name">Filename:</label>
                     <input type="text" id="output-panel-name" placeholder="Filename">
@@ -210,15 +215,13 @@
         function format_output() {
             eel.format_output_py();
         };
-        function get_output_format() {
-            eel.get_output_format_py()(console.log);
-        };
-        function end() {
-            eel.finish();
+        function save() {
+            eel.save_py();
         };
         document.getElementById('record-btn').addEventListener('click', record);
         document.getElementById('stop-btn').addEventListener('click', stop);
         document.getElementById('format-btn').addEventListener('click', format_output);
+        document.getElementById('save-btn').addEventListener('click', save);
     </script>
     <script>
         /**
@@ -270,10 +273,16 @@
          */
         eel.expose(appendBotText);
         function appendBotText(bot) {
-            let botList = document.querySelector('.col2 ul');
+            try {
+            let botId = document.getElementById(bot.name);
+            let botFeed = botId.querySelector(`.bot-feed ul`);
             let botItem = document.createElement('li');
-            botItem.innerText = bot;
-            botList.insertBefore(botItem, botList.childNodes[0]);
+            botItem.innerText = bot.text;
+            botFeed.insertBefore(botItem, botFeed.childNodes[0]);
+            }
+            catch(err) {
+                console.log(err)
+            }
         }
 
         eel.expose(clearBots);
@@ -308,23 +317,36 @@
          */
         function mapBots(bots) {
             document.querySelector('.bot-panel-content').innerHTML = bots.map(bot => {
-                return `<div class="bot">
+                return `<div class="bot" id=${bot.name}>
                     <h3>${bot.name}</h3>
-                    <p>Active: ${bot.active}</p>
+                    <div class="bot-feed">
+                        <ul></ul>
+                        <p>Active: ${bot.active}</p>
+                    </div>
                     <button id='${bot.name}-active'>Active</button>
                 </div>`
             }).join('')
+            document.querySelectorAll(".bot").forEach(function (bot) {
+                let botName = bot.querySelector('h3');
+                botName.addEventListener('click', function () {
+                    let feed = bot.querySelector('.bot-feed');
+                    if (feed.style.display === "none") {
+                        feed.style.display = "block";
+                    } else {
+                        feed.style.display = "none";
+                    }
+                });
+                let activeButton = bot.querySelector('button');
+                activeButton.addEventListener('click', function () {
+                    let botName = activeButton.id.split('-')[0];
+                    eel.toggle_bot_py(botName)(mapBots);
+                });
+            });
         }
+
         document.getElementById('bot-panel-settings').addEventListener('click', (event) => {
             document.getElementById('bot-panel').classList.toggle('closed');
         });
-        document.getElementById('bot-panel').addEventListener('click', (event) => {
-            let button = event.target;
-            let botName = button.id.split('-')[0];
-            if (button.id.includes('active')) {
-                eel.toggle_bot_py(botName)(mapBots);
-            }
-        })
         eel.get_bots_py()(mapBots);
     </script>
 </body>

@@ -14,7 +14,6 @@
     - [x] Create the timeline view
     - [ ] Hide/disappear over time
     - [x] Add bot name
-- [ ] Investigate peak sound meter (not displaying)
 - [ ] Configure based on conversation context
 
 ## Design
@@ -26,18 +25,22 @@
         - Emulate full file transcription, detection of significant pauses.
 - [ ] Benchmark different model sizes and performance
 - [ ] Add a new cache directory for the whisper model
+- [ ] Faster load time of initial transcription
 - [ ] On stop, trigger end of transcription
 - [x] set a user location for storing saved transcripts/outputs
   - [ ] let a user specify through filedrop down where it's saved
 - [ ] Context setting: experiment with the benefits of setting a context for the meeting
 - [ ] investigate calling an llm on transcript to improve quality
 
+## Output Format
+- [ ] Try out different prompts
+- [ ] Reduce the risk of imagineering. It should only put in what was in the text.
+
 ## Diarization
 - [x] Investigate speaker identification with pyannote; at the very least disambiguate me speaking vs. others speaking.
     - Using embeddings from speechbrain to verify
-- [ ] Implement a Diarization feature
-- [ ] Investigate https://rmozone.com/snapshots/2021/11/gentle-history/
-
+- [ ] Implement the Diarization feature
+- [ ] Test whisper diarization
 
 # Bots
 - [ ] add a user profile so if a user deactivates or removes a bot from their user dir its not readded.
