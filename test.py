@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import eel
 import json
 import logging
 import numpy as np
@@ -15,10 +14,9 @@ import whisper
 from appdirs import user_data_dir
 from dotenv import load_dotenv
 from langchain import OpenAI
-from earbud.bots import ConceptBot, SummarizeBot, BotCreator
+from earbud.bots import BotCreator
 from earbud.datastructures import Transcript, Segment
 from earbud.utilities import mtg_summary
-from earbud.output_fmts import user_output_fmts, save_output_fmt
 
 load_dotenv()
 
@@ -28,9 +26,9 @@ MODEL_TYPE="base.en"
 LANGUAGE="English"
 global_ndarray = None
 
-logging.basicConfig(level=logging.DEBUG,                     
+logging.basicConfig(level=logging.DEBUG,           
 					format='%(asctime)s %(message)s',
-                    datefmt='%m/%d/%Y %I:%M:%S %p')
+					datefmt='%m/%d/%Y %I:%M:%S %p')
 
 try:
 	logging.debug("Loading model...")
@@ -47,9 +45,10 @@ TRANSCRIPT_FOLDER = user_data_dir("Earbud")
 
 
 class Recorder():
-	def __init__(self):
+	def __init__(self, frontend_fn=lambda x,y: print(x)):
 		self.stream = None
 		self.recording = False
+		self.recording_flag = threading.Event()
 		self.previously_recording = False
 		self.input_overflows = 0
 		self.peak = 0
@@ -62,9 +61,10 @@ class Recorder():
 		self.transcript = Transcript()
 		self.output_fmt = None
 		self.mutex = threading.Lock()
-		self.n_batch_samples = 15 * 16000
+		self.n_batch_samples = 10 * 16000
 		self.max_queue_size = 3 * self.n_batch_samples
 		self.silence_threshold = 0.075
+		self.frontend_fn = frontend_fn
 
 	
 	def bot_loading(self):
@@ -76,7 +76,7 @@ class Recorder():
 		except Exception as e:
 			llm = None
 			print(e)
-		bots = [ConceptBot(llm=llm), SummarizeBot(llm=llm),]
+		bots = []
 		if not os.path.exists(bot_config_dir):
 			os.makedirs(bot_config_dir)
 		try:
@@ -99,9 +99,8 @@ class Recorder():
 		#     This is safe because here we are only accessing it once (with a
 		#     single bytecode instruction).
 		chunk: np.ndarray = indata.copy().ravel()
-		with self.mutex:
-			#TODO set size limit
-			self.audio_q = np.append(self.audio_q, chunk)
+		#todo Mutex
+		self.audio_q = np.append(self.audio_q, chunk)
 
 		self.peak = max(self.peak, np.max(np.abs(indata)))
 		try:
@@ -112,7 +111,6 @@ class Recorder():
 			self.peak = 0
 
 	def process_transcript(self, indata_transformed, prev):
-
 		start = time.time()
 		logging.debug("Transcribing, starting %s", start)
 		result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
@@ -123,7 +121,7 @@ class Recorder():
 			for s in result['segments']]
 		self.transcript.segments.extend(segments)
 		result_text = "{text}".format(text=result['text'])
-		# eel.appendTranscriptText(result_text)
+		self.frontend_fn(result_text, "transcript")
 		return result['text']
 
 	def process_audio_buffer(self):
@@ -131,11 +129,9 @@ class Recorder():
 		prev = None
 		start = time.time()
 		while self.recording:
-			self.mutex.acquire()
 			if self.audio_q.size >= self.n_batch_samples:
 				samples = self.audio_q[:self.n_batch_samples]
 				self.audio_q = self.audio_q[self.n_batch_samples:]
-				self.mutex.release()
 				logging.debug("Processing audio buffer of time %s", time.time() - start)
 				start = time.time()
 				#If the audio is above the silence threshold, then the speaker is still talking
@@ -149,39 +145,9 @@ class Recorder():
 					samples = np.concatenate((global_ndarray, samples), dtype=np.float32)
 					global_ndarray = None
 					continuation = False	
-
-
-				# discard buffers that contain mostly silence only if previous buffer wasn't a continuation
-				#if(continuation is False and (np.asarray(np.where(indata_flattened > SILENCE_THRESHOLD)).size < SILENCE_RATIO)):
-				#	continue
-						
-				#if (global_ndarray is not None):
-				#	global_ndarray = np.concatenate((global_ndarray, indata), dtype='int16')
-				#else:
-			#		global_ndarray = indata
-				
-				#TODO: might not be robust to general streaming audio, better to use a buffer and go back and fix earlier mistakes
-			#	continuation = True
-			#	# keep recording if the person is still talking
-			#	if (np.average((indata_flattened[-100:-1])) > SILENCE_THRESHOLD/5):
-			#		continue
-			#	else:
-			#		local_ndarray = global_ndarray.copy()
-		#			global_ndarray = None
-		#			indata_transformed = local_ndarray.flatten().astype(np.float32) / 32768.0
-		#			"""Transcribe Audio"""
-		#		indata_transformed = samples.flatten().astype(np.float32)
 				prev = self.process_transcript(samples, prev)
-				print(prev)
-				#	print(prev)
 				"""Bot Management Loop"""
-					#TODO: make sure only called once
-				#	asyncio.run(self.bot_results())
-			#	continuation = False
-			#	del local_ndarray
-			#	del indata_flattened
-			else:
-				self.mutex.release()
+				asyncio.run(self.bot_results())
 
 	async def bot_results(self):
 		#TODO: add bot results to transcript as they come in and error handling
@@ -192,9 +158,8 @@ class Recorder():
 					bot_result = bot(self.transcript)
 					"""Update GUI from bot results"""
 					if bot_result is not None:
-						print("firing bot")
 						text = f"{bot.name}: {bot_result}"
-#						eel.appendBotText({"name": bot.name, "text": text})
+						self.frontend_fn({"name": bot.name, "text": text}, "bot")
 				except Exception as e:
 					print(e)
 					print("Error with bot: " + str(bot))
@@ -219,8 +184,7 @@ class Recorder():
 		try:
 			llm = OpenAI(temperature=0.0)
 			result = mtg_summary(self.transcript, prompt, llm)
-			print(result)
-#			eel.setOutputText(result)
+			self.frontend_fn(result, "output")
 		except Exception as e:
 			print(e)
 	
@@ -240,9 +204,14 @@ class Recorder():
 		self.stream = sd.InputStream(samplerate=16000, dtype='float32', channels=1, callback=self.audio_callback)
 		self.stream.start()
 		self.recording = True
-		self.process_audio_buffer()
-	#	self.thread = threading.Thread(target=self.process_audio_buffer)
-	#	self.thread.start()
+		self.thread = threading.Thread(target=self.process_audio_buffer)
+		self.thread.start()
+	
+	def stop(self):
+		self.recording = False
+		self.stream.close()
+		self.stream = None
+		self.thread.join()
 
 if __name__ == '__main__':
 	recorder = Recorder()
