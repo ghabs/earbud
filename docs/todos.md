@@ -4,7 +4,8 @@
 - [x] Determine native app implementation
     - I don't want to invest much time in the GUI until this is decided.
 - [ ] Create a progress monitor that tracks queue size and status of the transcription (how far behind it's lagging)
-- [ ] Investigate greenlet vs thread with eel.
+- [x] Investigate greenlet vs thread with eel.
+    - pretty sure I want to minimize threads created overall and new approach does that.
 - [ ] Append transcription metadata (filename, context, conversation)
 - [ ] BotManager window with customizable params
     - [x] Dispay bots
@@ -22,7 +23,14 @@
 # Transcription
 - [x] Explore different blocksizes for faster processing
     - investigate more roubst, transcription tied to the bot design/switch to async
-        - Emulate full file transcription, detection of significant pauses.
+    - [x] Test whether new method works better/more reliably
+        - Much cleaner code implementation, unclear if it works that much better. still getting some 'imagining'
+        - Longer form audio segments that get closer to 30 seconds work better.
+- [ ] Explore noise suppression 
+    - https://github.com/xiph/rnnoise
+- [ ] Emulate full file transcription, detection of significant pauses.
+    - Detect silence and use that to trigger transcription, unless it's over the limit of the queue
+- [ ] Add ambient noise filtering
 - [ ] Benchmark different model sizes and performance
 - [ ] Add a new cache directory for the whisper model
 - [ ] Faster load time of initial transcription
@@ -44,6 +52,7 @@
 
 # Bots
 - [ ] add a user profile so if a user deactivates or removes a bot from their user dir its not readded.
+- [ ] Push certain bot outputs to the transcript
 
 ## Keyword Search
 - [ ] Reimplement a bot that detects keywords and sends a notification

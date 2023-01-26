@@ -47,7 +47,6 @@ DIR_LOC = os.path.dirname(os.path.realpath(__file__))
 TRANSCRIPT_FOLDER = user_data_dir("Earbud")
 
 
-
 class Recorder():
 	def __init__(self):
 		self.stream = None
@@ -224,6 +223,7 @@ Eel Exposed Functions for Frontend
 @eel.expose
 def record_py():
 	print("Recording")
+	#TODO: set input device
 	def create_stream(device=None):
 		if recorder.stream is not None:
 			recorder.stream.close()
