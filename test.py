@@ -48,7 +48,6 @@ class Recorder():
 	def __init__(self, frontend_fn=lambda x,y: print(x)):
 		self.stream = None
 		self.recording = False
-		self.recording_flag = threading.Event()
 		self.previously_recording = False
 		self.input_overflows = 0
 		self.peak = 0
@@ -99,16 +98,8 @@ class Recorder():
 		#     This is safe because here we are only accessing it once (with a
 		#     single bytecode instruction).
 		chunk: np.ndarray = indata.copy().ravel()
-		#todo Mutex
-		self.audio_q = np.append(self.audio_q, chunk)
-
-		self.peak = max(self.peak, np.max(np.abs(indata)))
-		try:
-			self.metering_q.put_nowait(self.peak)
-		except queue.Full:
-			pass
-		else:
-			self.peak = 0
+		with self.mutex:
+			self.audio_q = np.append(self.audio_q, chunk)
 
 	def process_transcript(self, indata_transformed, prev):
 		start = time.time()
@@ -129,9 +120,11 @@ class Recorder():
 		prev = None
 		start = time.time()
 		while self.recording:
+			self.mutex.acquire()
 			if self.audio_q.size >= self.n_batch_samples:
 				samples = self.audio_q[:self.n_batch_samples]
 				self.audio_q = self.audio_q[self.n_batch_samples:]
+				self.mutex.release()
 				logging.debug("Processing audio buffer of time %s", time.time() - start)
 				start = time.time()
 				#If the audio is above the silence threshold, then the speaker is still talking
@@ -148,6 +141,8 @@ class Recorder():
 				prev = self.process_transcript(samples, prev)
 				"""Bot Management Loop"""
 				asyncio.run(self.bot_results())
+			else:
+				self.mutex.release()
 
 	async def bot_results(self):
 		#TODO: add bot results to transcript as they come in and error handling
