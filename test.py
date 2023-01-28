@@ -14,7 +14,7 @@ import whisper
 from appdirs import user_data_dir
 from dotenv import load_dotenv
 from langchain import OpenAI
-from earbud.bots import BotCreator
+from earbud.bots import BotCreator, SilenceBot
 from earbud.datastructures import Transcript, Segment
 from earbud.utilities import mtg_summary
 
@@ -55,7 +55,7 @@ class Recorder():
 		self.audio_q = np.ndarray([], dtype=np.float32)
 		self.metering_q = queue.Queue()
 		self.thread = None
-		self.bots = []
+		self.bots = [SilenceBot()]
 		self.bot_loading()
 		self.transcript = Transcript()
 		self.output_fmt = None
@@ -75,7 +75,7 @@ class Recorder():
 		except Exception as e:
 			llm = None
 			print(e)
-		bots = []
+		bots = self.bots
 		if not os.path.exists(bot_config_dir):
 			os.makedirs(bot_config_dir)
 		try:
@@ -104,7 +104,7 @@ class Recorder():
 	def process_transcript(self, indata_transformed, prev):
 		start = time.time()
 		logging.debug("Transcribing, starting %s", start)
-		result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
+		result = model.transcribe(indata_transformed, language=LANGUAGE, condition_on_previous_text=False)
 		stop = time.time()
 		logging.debug("Function took %s seconds to run", stop - start)
 		segments = [Segment(text=s["text"], start=s["start"], end=s["end"],

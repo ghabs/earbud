@@ -35,11 +35,10 @@ def summarize_transcript_text(segments: list[Segment]) -> PromptTemplate:
     return prompt
 
 
-def mtg_summary(transcript: Transcript, fmt:str, llm) -> Transcript:
+def mtg_summary(text, fmt:str, llm) -> Transcript:
     """
     Create a meeting summary document
     """
-    text = " ".join([text_clean(seg.text) for seg in transcript.segments])
     prompt = PromptTemplate(input_variables=["transcript"], template=fmt)
     prompt = prompt.format(transcript=text)
     return llm(prompt)

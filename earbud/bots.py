@@ -21,7 +21,7 @@ class Bot():
         """
         Check if the most recent transcript segment is empty.
         """
-        return transcript.peak().text == ""
+        return transcript.peak().text.strip() == ""
 
     def __call__(self, text: str) -> str:
         """
@@ -150,13 +150,14 @@ class KeywordBot(Bot):
         self.keywords = keywords
         super().__init__()
 
-    def __call__(self, text: str) -> str:
+    def __call__(self, segments: List) -> str:
         """
         Run the bot on the text.
         """
+        text = " ".join([seg["text"] for seg in segments])
         for keyword in self.keywords:
             if keyword in text:
-                return keyword
+                return "Keyword found: " + keyword
         return None
 
 
@@ -214,6 +215,34 @@ class SummarizeBot(Bot):
             return None
         self.i = len(transcript.segments) - 1
         return self._summarize(transcript.segments)
+
+
+class SilenceBot(Bot):
+    """
+    A bot that checks for silence, and returns prompt suggestions.
+    """
+
+    def __init__(self) -> None:
+        self.name = "SilenceBot"
+        self.counter = 0
+        self.threshold = 1
+        super().__init__()
+
+    def __call__(self, transcript: Transcript) -> str:
+        """
+        Run the bot on the text.
+        """
+        if self._empty_segment(transcript):
+            self.counter += 1
+        if self.counter >= self.threshold:
+            self.counter = 0
+            print("silencebot fired")
+            return "You are currently silent. You should say something."
+        return None
+
+
+
+
 
 
 if __name__ == "__main__":

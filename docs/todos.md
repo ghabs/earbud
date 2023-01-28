@@ -1,3 +1,10 @@
+# Top
+- [ ] Fix hallucination
+    - https://github.com/openai/whisper/discussions/679
+        - https://github.com/openai/whisper/discussions/679#discussioncomment-4540909
+    - https://github.com/snakers4/silero-vad/blob/master/LICENSE
+        - VAD to detect 
+
 # GUI
 - [x] Create figma designs
 - [x] Investigate timeline based designs
@@ -16,6 +23,14 @@
     - [ ] Hide/disappear over time
     - [x] Add bot name
 - [ ] Configure based on conversation context
+
+- [ ] Separate frontend code from recorder code
+    - format_output pass text back to front end
+    - process_transcript, bot_results should accept eel.appendText as a callback param
+        - maybe a generic one and the specific place the text goes is strictly frontend
+    - Maybe Create one general use function for calling JS eel that pases them back 
+    
+
 
 ## Design
 - [ ] How to handle errors in transcription/bots, what should that... feel like?
