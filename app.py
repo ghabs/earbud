@@ -1,25 +1,45 @@
 import eel
-from test import Recorder
+from main import Realtime_Whisper
 from earbud.bots import BotCreator
 from earbud.output_fmts import user_output_fmts, save_output_fmt
+from langchain import OpenAI
+from earbud.utilities import mtg_summary
+from earbud.output_fmts import user_output_fmts, save_output_fmt
+from dotenv import load_dotenv
+load_dotenv()
 
-recorder = Recorder()
+recorder = Realtime_Whisper("base.en")
+
+class OutputFormat:
+	def __init__(self, name, value):
+		self.name = name
+		self.output_fmt = value
+		self.transcript = None
+	
+	def formatted_transcript(self, **kwds):
+		try:
+			llm = OpenAI(temperature=0.0)
+			result = mtg_summary(self.transcript, self.output_fmt, llm)
+			return result
+		except Exception as e:
+			print(e)
+
+formatter = OutputFormat("mtg", user_output_fmts()[0]["value"])
 
 @eel.expose
 def record_py():
-	recorder.record()
+	print("Recording")
+	recorder.start()
 
 @eel.expose
 def stop_py():
-	print("Stopping")
-	recorder.recording = False
-	recorder.stream.close()
-	recorder.stream = None
-	print("Stopped Recording")
+	recorder.stop()
 
 @eel.expose
 def format_output_py():
-	recorder.format_output()
+	print("Formatting Transcript")
+	return formatter.formatted_transcript()
+
 
 @eel.expose
 def save_py():
@@ -76,12 +96,15 @@ def frontend_fn(msg, caller=None):
 	if caller == "transcript":
 		return eel.appendTranscriptText(msg)
 	if caller == "bot":
-		return eel.appendBotText(msg)
+		return eel.bot_feed(msg)
+	if caller == "set_output":
+		formatter.transcript = msg
+		eel.setOutputText(msg)
 	if caller == "output":
 		return eel.setOutputText(msg)
 	return print(msg)
 
-recorder.frontend_fn = frontend_fn
+recorder.stream_fn = frontend_fn
 
 if __name__ == '__main__':
 	eel.init('fe')

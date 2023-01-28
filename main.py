@@ -1,296 +1,338 @@
+# asr using whisper and Silero-VAD (https://github.com/snakers4/silero-vad)
+# structure based on the very nice work of Oliver Guhr over at https://github.com/oliverguhr/wav2vec2-live
 import asyncio
-import datetime
-import eel
-import json
-import logging
+import pyaudio
 import numpy as np
-import os
-import queue
-import sounddevice as sd
 import threading
-import timeit
+import time
+from sys import exit
+from queue import Queue
+import matplotlib.pylab as plt
+import wave
 import whisper
+import struct
+import multiprocessing
+import torch
+import re
 
-from appdirs import user_data_dir
-from dotenv import load_dotenv
-from langchain import OpenAI
-from earbud.bots import ConceptBot, SummarizeBot, BotCreator
-from earbud.datastructures import Transcript, Segment
-from earbud.utilities import mtg_summary
-from earbud.output_fmts import user_output_fmts, save_output_fmt
+from earbud.bots import KeywordBot
 
+# for Debugging: save the audiostream that was provided to whisper after sending through queue
+filename = 'audio_provided.wav'
+# for Debugging: save the audiostream that was actually recorded pre sending.
+filename_orig = 'audio_recorded.wav'
 
-load_dotenv()
+def check_string(string):
+    pattern = r'^\.+$'
+    if re.search(pattern, string):
+        return True
+    else:
+        return False
 
-# the model used for transcription. https://github.com/openai/whisper#available-models-and-languages
-MODEL_TYPE="tiny.en"
-# pre-set the language to avoid autodetection
-LANGUAGE="English"
-global_ndarray = None
-logger = logging.getLogger()
-
-try:
-	logger.debug("Loading model...")
-	start = timeit.default_timer()
-	model = whisper.load_model(MODEL_TYPE)
-	stop = timeit.default_timer()
-	logger.debug("Model loaded. %s", stop - start)
-except:
-	logger.error("Model not found.")
-
-
-SILENCE_THRESHOLD=400
-# should be set to the lowest sample amplitude that the speech in the audio material has
-SILENCE_RATIO=100
-
-DIR_LOC = os.path.dirname(os.path.realpath(__file__))
-TRANSCRIPT_FOLDER = user_data_dir("Earbud")
+async def bot_feed(bots, segments, stream_fn):
+    # TODO: add bot results to transcript as they come in and error handling
+    for bot in bots:
+        if bot.active:
+            try:
+                # TODO: turn bot calls into async
+                bot_result = bot(segments)
+                """Update GUI from bot results"""
+                if bot_result is not None:
+                    text = f"{bot.name}: {bot_result}"
+                    stream_fn({"name": bot.name, "text": text}, "bot")
+            except Exception as e:
+                print(e)
+                print("Error with bot: " + str(bot))
 
 
-class Recorder():
-	def __init__(self):
-		self.stream = None
-		self.recording = False
-		self.previously_recording = False
-		self.input_overflows = 0
-		self.peak = 0
-		self.audio_q = queue.Queue()
-		self.metering_q = queue.Queue()
-		self.thread = None
-		self.bots = []
-		self.bot_loading()
-		self.transcript = Transcript()
-		self.output_fmt = None
+class Realtime_Whisper():
+    exit_event = threading.Event()
 
-	
-	def bot_loading(self):
-		"""Loads the bots from the bots.json file"""
-		bot_config_dir = os.path.join(user_data_dir("earbud", "earbud"), "bot_configs")
-		bot_creator = BotCreator()
-		try: 
-			llm = OpenAI()
-		except Exception as e:
-			llm = None
-			print(e)
-		bots = [ConceptBot(llm=llm), SummarizeBot(llm=llm),]
-		if not os.path.exists(bot_config_dir):
-			os.makedirs(bot_config_dir)
-		try:
-			for bot_file in os.listdir(bot_config_dir):
-				if bot_file.endswith(".json"):
-					bot_file_json = json.load(open(os.path.join(bot_config_dir, bot_file)))
-					bots.append(bot_creator.load_bot_config(bot_file_json))
-			self.bots = bots
-		except:
-			print("error loading bots")
-			self.bots = []
+    def __init__(self, model_name, device_name="default", stream_fn=lambda x, y: print(x)):
+        self.model_name = model_name
+        self.device_name = device_name
+        self.stream_fn = stream_fn
+        self.transcript = ""
+        self.bots = [KeywordBot(["hello", "hi", "hey"])]
 
-	def audio_callback(self, indata, frames, time, status):
-		"""This is called (from a separate thread) for each audio block."""
-		if status.input_overflow:
-			# NB: This increment operation is not atomic, but this doesn't
-			#     matter since no other thread is writing to the attribute.
-			self.input_overflows += 1
-		# NB: self.recording is accessed from different threads.
-		#     This is safe because here we are only accessing it once (with a
-		#     single bytecode instruction).
-		if self.recording:
-			self.audio_q.put(indata.copy())
-			self.previously_recording = True
-		else:
-			if self.previously_recording:
-				self.audio_q.put(None)
-				self.previously_recording = False
+    def stop(self):
+        """stop the asr process"""
+        Realtime_Whisper.exit_event.set()
+        self.asr_input_queue.put("close")
+        print("asr stopped")
 
-		self.peak = max(self.peak, np.max(np.abs(indata)))
-		try:
-			self.metering_q.put_nowait(self.peak)
-		except queue.Full:
-			pass
-		else:
-			self.peak = 0
+    def start(self):
+        """start the asr process"""
+        manager = multiprocessing.Manager()
 
-	def process_transcript(self, indata_transformed, prev):
-		if logger.level == logging.DEBUG:
-			start = timeit.default_timer()
-			logger.debug("Transcribing, starting %s", start)
-		result = model.transcribe(indata_transformed, language=LANGUAGE, initial_prompt=prev)
-		if logger.level == logging.DEBUG:
-			stop = timeit.default_timer()
-			logger.debug("Time: %s", stop - start)
-		segments = [Segment(text=s["text"], start=s["start"], end=s["end"],
-			temperature=s["temperature"], avg_log_prob=s["avg_logprob"], no_speech_prob=s["no_speech_prob"])
-			for s in result['segments']]
-		self.transcript.segments.extend(segments)
-		result_text = "{text}".format(text=result['text'])
-		eel.appendTranscriptText(result_text)
-		return result['text']
+        self.asr_output_queue = Queue()
+        self.asr_input_queue = Queue()
 
-	def process_audio_buffer(self):
-			global global_ndarray
-			global_ndarray = None
-			queue = self.audio_q
-			continuation = False
-			prev = None
-			while self.recording:
-				eel.sleep(1)
-				#TODO: determine if sleep function when no talking, make sure not overloading
-				while queue.empty() is False:
-					indata = queue.get()
-					#TODO: handle none case, determine if global_ndarray is cleared
-					try:
-						indata_flattened = abs(indata.flatten())
-					except AttributeError as e:
-						print(e)
-						continue
+        # currently not used, the queue is still in for convenience...
+        self.visualization_input_queue = manager.Queue()
 
-					# discard buffers that contain mostly silence only if previous buffer wasn't a continuation
-					if(continuation is False and (np.asarray(np.where(indata_flattened > SILENCE_THRESHOLD)).size < SILENCE_RATIO)):
-						continue
-							
-					if (global_ndarray is not None):
-						global_ndarray = np.concatenate((global_ndarray, indata), dtype='int16')
-					else:
-						global_ndarray = indata
-					
-					#TODO: might not be robust to general streaming audio, better to use a buffer and go back and fix earlier mistakes
-					continuation = True
-					# keep recording if the person is still talking
-					if (np.average((indata_flattened[-100:-1])) > SILENCE_THRESHOLD/5):
-						continue
-					else:
-						local_ndarray = global_ndarray.copy()
-						global_ndarray = None
-						indata_transformed = local_ndarray.flatten().astype(np.float32) / 32768.0
-						"""Transcribe Audio"""
-						print(indata_transformed)
-						prev = self.process_transcript(indata_transformed, prev)
-						"""Bot Management Loop"""
-						#TODO: make sure only called once
-						asyncio.run(self.bot_results())
-						continuation = False
-						del local_ndarray
-						del indata_flattened
+        self.asr_process = threading.Thread(target=Realtime_Whisper.asr_process, args=(
+            self.model_name, self.asr_input_queue, self.asr_output_queue, self.stream_fn, self.bots))
+        self.asr_process.daemon = True
+        self.asr_process.start()
 
-	async def bot_results(self):
-		#TODO: add bot results to transcript as they come in and error handling
-		for bot in self.bots:
-			if bot.active:
-				try:
-					#TODO: turn bot calls into async
-					bot_result = bot(self.transcript)
-					"""Update GUI from bot results"""
-					if bot_result is not None:
-						print("firing bot")
-						text = f"{bot.name}: {bot_result}"
-						eel.appendBotText({"name": bot.name, "text": text})
-				except Exception as e:
-					print(e)
-					print("Error with bot: " + str(bot))
+        time.sleep(5)  # start vad after asr model is loaded
 
-	def write_transcript(self, transcript: Transcript):
-		date = None
-		try:
-			date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-			with open(f'{TRANSCRIPT_FOLDER}/{date}_{MODEL_TYPE}_transcript.txt', 'w') as f:
-				for s in transcript.segments:
-					f.write(s.text + '\n')
-		except Exception as e:
-			print(f'Error occurred while writing transcript {date}: {e}')
-	
-	def format_output(self):
-		#TODO set as async
-		prompt = """Given the following transcript of a single person talking, create a summary doc that contains the following -
-					Summary: 1-2 sentences describing what the person was talking about
-					Action Items: A list of action items the person said
+        self.vad_process = threading.Thread(target=Realtime_Whisper.vad_process, args=(
+            self.device_name, self.asr_input_queue, self.visualization_input_queue, ))
+        self.vad_process.daemon = True
+        self.vad_process.start()
 
-					Transcript: {transcript}"""
-		try:
-			llm = OpenAI(temperature=0.0)
-			result = mtg_summary(self.transcript, prompt, llm)
-			print(result)
-			eel.setOutputText(result)
-		except Exception as e:
-			print(e)
-		
+        # Debug optional visualization
+        # self.visualization_process = multiprocessing.Process(target=Realtime_Whisper.plot_stream, args=(
+        #    self.visualization_input_queue,))
+        # self.visualization_process = threading.Thread(target=Realtime_Whisper.plot_stream, args=(
+        #     self.visualization_input_queue,))
+        # self.visualization_process.daemon = True
+        # self.visualization_process.start()
 
-recorder = Recorder()
+    def int2float(sound):
+        """convert the wav pcm16 format to one suitable for silero vad"""
+        _sound = np.copy(sound)  # may be not necessary
+        # abs_max = np.abs(_sound).max()
+        abs_max = 32767
+        _sound = _sound.astype('float32')
+        if abs_max > 0:
+            _sound *= 1 / abs_max
+        _sound = _sound.squeeze()  # depends on the use case
+        return _sound
 
-"""
-Eel Exposed Functions for Frontend
-"""
+    def plot_stream(instream):
+        """plot audio stream via matplotlib"""
+        CHUNK = 160
+        CHANNELS = 1
+        RATE = 16000
 
-@eel.expose
-def record_py():
-	print("Recording")
-	#TODO: set input device
-	def create_stream(device=None):
-		if recorder.stream is not None:
-			recorder.stream.close()
-		recorder.stream = sd.InputStream(samplerate=16000, dtype='int16',
-			device=device, channels=1, callback=recorder.audio_callback)
-		recorder.stream.start()
-	create_stream()
-	recorder.recording = True
-	recorder.thread = threading.Thread(target=recorder.process_audio_buffer)
-	recorder.thread.start()
+        fig, ax = plt.subplots()
+        x = np.arange(0, 2 * CHUNK, 2)
 
-@eel.expose
-def stop_py():
-	recorder.recording = False
-	recorder.stream.close()
-	recorder.stream = None
-	print("Stopped Recording")
+        line, = ax.plot(x, np.random.rand(CHUNK), 'r')
+        ax.set_ylim(-20000, 20000)
+        ax.set_xlim(0, CHUNK)
+        fig.show()
 
-@eel.expose
-def format_output_py():
-	print("Formatting Transcript")
-	recorder.format_output()
+        while True:
+            data = instream.get()
+            dataInt = struct.unpack(str(CHUNK) + 'h', data)
+            line.set_ydata(dataInt)
+            fig.canvas.draw()
+            fig.canvas.flush_events()
 
-@eel.expose
-def save_py():
-	try:
-		recorder.write_transcript(recorder.transcript)
-		eel.clearTranscript()
-	except Exception as e:
-		print(e)
+    def vad_process(device_name, asr_input_queue, vis_input_queue):
+        """voice activity detection using silero-vad"""
+        model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad',
+                                      model='silero_vad',
+                                      force_reload=False,
+                                      onnx=False)
+        (get_speech_timestamps,
+         save_audio,
+         read_audio,
+         VADIterator,
+         collect_chunks) = utils
 
-@eel.expose
-def get_bots_py():
-	return [{"name": bot.name, "active": bot.active} for bot in recorder.bots]
+        # not sure this is useful, but I leave it in for now...
+        vad_iterator = VADIterator(model)
 
-@eel.expose
-def toggle_bot_py(name):
-	for bot in recorder.bots:
-		if bot.name == name:
-			bot.active = not bot.active
-			break
-	return get_bots_py()
+        audio = pyaudio.PyAudio()
+        FORMAT = pyaudio.paInt16
+        CHANNELS = 1
+        RATE = 16000
+        FRAME_DURATION = 60
+        CHUNK = int(RATE * FRAME_DURATION / 1000)
+        SPEECH_PROB_THRESHOLD = 0.2  # This probably needs a bit of tweaking
 
-@eel.expose
-def create_bot_py(name, trigger, trigger_value, action, action_value):
-	print("Creating Bot")
-	bot_creator = BotCreator()
-	bot_config = bot_creator.make_bot_config(name, trigger, trigger_value, action, action_value)
-	recorder.bots.append(bot_creator.create(bot_config))
-	bot_creator.store_bot_config(bot_config)
-	return get_bots_py()
+        microphones = Realtime_Whisper.list_microphones(audio)
+        selected_input_device_id = Realtime_Whisper.get_input_device_id(
+            device_name, microphones)
+        print(microphones)
 
-@eel.expose
-def output_fmts_py():
-	return user_output_fmts()
+        # this should be the default mic, tweak as needed ...
+        selected_input_device_id = 1
 
-@eel.expose
-def set_output_format_py(fmt):
-	print(f"Setting Output Format {fmt}")
-	recorder.output_fmt = fmt
+        # TODO: investigate why default input device stopped working
+        stream = audio.open(
+            input_device_index=selected_input_device_id,
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK)
 
-@eel.expose
-def create_output_format_py(fmt):
-	print(f"Creating Output Format {fmt}")
-	save_output_fmt(fmt)
-	return output_fmts_py()
+        # framebuffer for queue
+        frames = b''
+        # masterframebuffer for saving the data send to asr
+        masterframes_asr = b''
 
-if __name__ == '__main__':
-	eel.init('fe')
-	eel.start('main.html')
+        last_speech_prob = 0
+
+        while True:
+            if Realtime_Whisper.exit_event.is_set():
+                break
+            frame = stream.read(CHUNK, exception_on_overflow=False)
+
+            frame_tensor = torch.from_numpy(
+                Realtime_Whisper.int2float(np.frombuffer(frame, dtype=np.int16)))
+
+            speech_prob = model(frame_tensor, RATE).item()
+
+            # turn this on for debugging and tweaking the threshold...
+            # print(speech_prob)
+
+            # accumulate frames in frame buffer if speech is detected and the total length is < 30 sec (max size of whisper chunk)
+            # THIS NEEDS TO BE LOOKED AT AGAIN MAYBE A FULL 30s WHISPER CHUNK IS TOO MUCH
+            if speech_prob > SPEECH_PROB_THRESHOLD and len(frames) < 480000:
+                frames += frame
+            # if there was speech and now there is none (i.e. an utterance has finished or the max length is exceeded, write to queue
+            elif (speech_prob <= SPEECH_PROB_THRESHOLD < last_speech_prob) or (len(frames) >= 480000):
+                asr_input_queue.put(frames)
+
+                masterframes_asr += frames
+                frames = b''
+
+            last_speech_prob = speech_prob
+
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+        # Open and Set the data of the WAV file
+        file = wave.open(filename_orig, 'wb')
+        file.setnchannels(1)
+        file.setsampwidth(2)
+        file.setframerate(16000)
+
+        # Write and Close the File
+        file.writeframes(b''.join(np.frombuffer(
+            masterframes_asr, dtype=np.int16)))
+        file.close()
+
+    def queue_to_string(queue):
+        output_str = ""
+        while not queue.empty():
+            segment = queue.get()
+            for s in segment:
+                output_str += s["text"]
+
+        return output_str
+
+    def asr_process(model_name, in_queue, output_queue, stream_fn, bots=[]):
+        """transcribe using whisper"""
+        model = whisper.load_model(
+            model_name)  # device=cudause cuda for everything > base model
+
+        # with current settings always excepts to 0, but left in to play around with the setting...
+        temperature_increment_on_fallback = 0
+        temperature = 0
+        try:
+            temperature = tuple(
+                np.arange(temperature, 1.0 + 1e-6, temperature_increment_on_fallback))
+        except:
+            temperature = 0
+
+        kwargs = {}
+        kwargs['language'] = 'en'
+        kwargs['verbose'] = True
+        kwargs['task'] = 'transcribe'
+        kwargs['temperature'] = temperature
+        kwargs['best_of'] = None
+        kwargs['beam_size'] = None
+        kwargs['patience'] = None
+        kwargs['length_penalty'] = None
+        kwargs['suppress_tokens'] = "-1"
+        kwargs['initial_prompt'] = None
+        # seems source of false Transcripts
+        kwargs['condition_on_previous_text'] = False
+        kwargs['fp16'] = False  # set false if using cpu
+        kwargs['compression_ratio_threshold'] = None  # 2.4
+        kwargs['logprob_threshold'] = None  # -1.0 #-0.5
+        kwargs['no_speech_threshold'] = None  # 0.6 #0.2
+
+        # masterframes = ''
+        masterframes = b''
+
+        while True:
+            audio_file = in_queue.get()
+
+            if audio_file == "close":
+                break
+
+            print("\nlistening to your beautiful voice\n")
+            masterframes += audio_file
+
+            audio_tensor = torch.from_numpy(Realtime_Whisper.int2float(
+                np.frombuffer(audio_file, dtype=np.int16)))
+
+            result = model.transcribe(audio_tensor, **kwargs)
+
+            if result != "":
+                output_queue.put(result["segments"])
+                # TODO add segments to stream
+                text = result["text"]
+                if check_string(text):
+                    text = ""
+                stream_fn(text, "transcript")
+                asyncio.run(bot_feed(bots, result["segments"], stream_fn))
+
+        # Open and Set the data of the WAV file
+        file = wave.open(filename, 'wb')
+        file.setnchannels(1)
+        file.setsampwidth(2)
+        file.setframerate(16000)
+
+        file.writeframes(b''.join(np.frombuffer(masterframes, dtype=np.int16)))
+        file.close()
+        full_audio = torch.from_numpy(Realtime_Whisper.int2float(
+                np.frombuffer(masterframes, dtype=np.int16)))
+        complete_transcript = model.transcribe(full_audio)
+
+
+        stream_fn(complete_transcript['text'], 'set_output')
+
+
+    def get_input_device_id(device_name, microphones):
+        for device in microphones:
+            if device_name in device[1]:
+                return device[0]
+
+    def list_microphones(pyaudio_instance):
+        info = pyaudio_instance.get_host_api_info_by_index(0)
+        numdevices = info.get('deviceCount')
+
+        result = []
+        for i in range(0, numdevices):
+            if (pyaudio_instance.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
+                name = pyaudio_instance.get_device_info_by_host_api_device_index(
+                    0, i).get('name')
+                result += [[i, name]]
+        return result
+
+    def get_last_text(self):
+        """returns the text, sample length and inference time in seconds."""
+        return self.asr_output_queue.get()
+    
+
+
+
+if __name__ == "__main__":
+    print("Live ASR")
+
+    # param is model size
+    asr = Realtime_Whisper("small.en")
+
+    asr.start()
+
+    last_text = 'Start'
+
+    try:
+        while True:
+            lastresult = asr.get_last_text()
+            for segment in lastresult:
+                print('ID: ' + str(segment['id']) + ' START: ' + str(round(segment['start'], 1)
+                                                                     ) + ' END: ' + str(round(segment['end'], 1)) + ' TEXT: ' + segment['text'])
+    except KeyboardInterrupt:
+        asr.stop()
+        exit()

@@ -1,0 +1,1 @@
+"{\"trigger\": {\"input\": [\"test\"], \"evaluation\": \"contains\"}, \"action\": {\"type\": \"prompt\", \"action\": \"Repeat Line\"}, \"name\": \"test\"}"

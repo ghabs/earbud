@@ -70,10 +70,6 @@
         .settings-btn {
             text-align: center;
         }
-
-        body {
-            background-color: slategray;
-        }
     </style>
 </head>
 
@@ -88,12 +84,15 @@
     <div class="flex">
 
         <div class="column col1">
-            <h2>Transcript</h2>
+            <h2>Raw Transcript</h2>
             <textarea id="transcript"></textarea>
         </div>
         <div class="column col2">
             <h2>Bots</h2>
             <div class="bot-panel-content">
+                <ul>
+                    
+                </ul>
 
             </div>
         </div>
@@ -114,6 +113,9 @@
         <button id="save-btn">Save</button>
     </div>
     <!-- Bot Panel -->
+    <div class="bot-panel-settings">
+        <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Settings</button>
+    </div>
     <div id="bot-panel">
         <div class="bot-panel-create">
             <h2>Create Bot</h2>
@@ -173,9 +175,6 @@
             </script>
         </div>
     </div>
-    <div class="bot-panel-settings">
-        <button id="bot-panel-settings" data-column="bot-panel">Toggle Bot Settings</button>
-    </div>
     <!-- Output Panel -->
     <div id="ouput-fmt-panel">
         <h2>Output Format Panel</h2>
@@ -213,7 +212,9 @@
             eel.stop_py();
         };
         function format_output() {
-            eel.format_output_py();
+            eel.format_output_py()(function (output) {
+                document.getElementById('output').value = output;
+            })
         };
         function save() {
             eel.save_py();
@@ -258,7 +259,7 @@
         eel.expose(appendTranscriptText);
         function appendTranscriptText(text) {
             let transcript = document.querySelector('#transcript');
-            transcript.value = transcript.value + " " + text;
+            transcript.value = text;
         }
 
         eel.expose(clearTranscript);
@@ -311,12 +312,21 @@
             document.querySelector(`.${column}`).classList.toggle('closed');
         });
     </script>
+    <script>
+        eel.expose(bot_feed);
+        function bot_feed(notification){
+            let botList = document.querySelector('.bot-panel-content ul');
+            let botItem = document.createElement('li');
+            botItem.innerText = `Bot ${notification.name}: ${notification.text}`;
+            botList.insertBefore(botItem, botList.childNodes[0]);
+        }
+    </script>
     <script type="text/javascript">
         /**
          * Bot Panel
          */
         function mapBots(bots) {
-            document.querySelector('.bot-panel-content').innerHTML = bots.map(bot => {
+            document.querySelector('.bot-panel-settings').innerHTML = bots.map(bot => {
                 return `<div class="bot" id=${bot.name}>
                     <h3>${bot.name}</h3>
                     <div class="bot-feed">
@@ -343,10 +353,6 @@
                 });
             });
         }
-
-        document.getElementById('bot-panel-settings').addEventListener('click', (event) => {
-            document.getElementById('bot-panel').classList.toggle('closed');
-        });
         eel.get_bots_py()(mapBots);
     </script>
 </body>
