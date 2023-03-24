@@ -6,9 +6,13 @@
 - create a folder for storing transcripts, default file name is .transcripts, editable in gui.py
 `mkdir earbud/.transcripts`
 
-- `python3 -m venv .venv`
-- `pip3 install -r requirements.txt`
+```
+python3 -m venv .env
+source .env/bin/activate
+pip3 install -r requirements.txt
+```
 
 ## Running
-- `python3 app.py`
+`python3 app.py`
 Note: There's a delay built in around the recording feature of five seconds for models to load, idk if that's needed anymore.
+`python3 main.py` will run the live transcription feature
